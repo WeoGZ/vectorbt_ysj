@@ -1,13 +1,24 @@
+import calendar
 import math
+from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
+from itertools import product
+from multiprocessing import get_context
+from time import perf_counter
+from typing import Callable
 
 import vectorbt as vbt
+from tqdm import tqdm
+
 from vectorbt_ysj.common.constant import *
 from vectorbt_ysj.utils.kline_utils import *
+from vectorbt_ysj.utils.param_utils import *
 from vectorbt_ysj.mytt import MyTT, MyTT_plus
 
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 from urllib import parse
 import plotly.io as pio
@@ -19,13 +30,45 @@ pio.renderers.default = "browser"
 pd.set_option('Display.max_columns', None)  # 展示全部列
 
 
-def execute(symbol: str, start_date: datetime, end_date: datetime, interval: Interval, length: int, stpr: int, n: int):
+def execute(symbol: str, start_date: datetime, end_date: datetime, interval: Interval, klines_open: pd.DataFrame = None,
+            klines_high: pd.DataFrame = None, klines_low: pd.DataFrame = None, klines_close: pd.DataFrame = None,
+            klines_vol: pd.DataFrame = None, length: int = 0, stpr: int = 0, n: int = 0):
     """程序入口"""
-    _, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date, end_date, interval)
+    if klines_close is None:
+        klines_open, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date,
+                                                                                      end_date, interval)
     if klines_close is not None and not klines_close.empty:
-        print(f'>>total_len={len(klines_close)}')
-        calculate_signals(klines_close[symbol], klines_high[symbol], klines_low[symbol], klines_vol[symbol],
-                          interval, length, stpr, n)
+        # print(f'>>total_len={len(klines_close)}')
+        long_open_signals, long_close_signals, short_open_signals, short_close_signals = calculate_signals(
+            klines_close[symbol], klines_high[symbol], klines_low[symbol], klines_vol[symbol],
+            interval, length, stpr, n)
+
+        long_entries = pd.Series(long_open_signals, index=klines_close.index)
+        long_exits = pd.Series(long_close_signals, index=klines_close.index)
+        short_entries = pd.Series(short_open_signals, index=klines_close.index)
+        short_exits = pd.Series(short_close_signals, index=klines_close.index)
+
+        vbt.settings['returns']['year_freq'] = '252 days'  # 平均一年252个交易日。vbt默认是365天
+        freq = convert_to_vbt_freq(interval).value
+        total_portfolio = vbt.Portfolio.from_signals(
+            close=klines_close,
+            entries=long_entries,
+            exits=long_exits,
+            short_entries=short_entries,
+            short_exits=short_exits,
+            init_cash=60000,
+            # cash_sharing=True,
+            group_by=True,
+            freq=freq,
+            size=10,
+            fees=0.0002,
+            slippage=0.0003
+        )
+        # print(f'\n>>[length={length}, stpr={stpr}, n={n}]\n{total_portfolio.stats()}')
+        print(f'\n>>[length={length}, stpr={stpr}, n={n}]'
+              f'\n总盈利={total_portfolio.total_profit():.2f}, 夏普比率={total_portfolio.sharpe_ratio():.2f}')
+        # total_portfolio.plot(
+        #     ['cum_returns', 'drawdowns', 'asset_value', 'underwater', 'gross_exposure', 'net_exposure']).show()
 
 
 def calculate_signals(close_price: pd.Series, high_price: pd.Series, low_price: pd.Series, vols: pd.Series,
@@ -35,11 +78,11 @@ def calculate_signals(close_price: pd.Series, high_price: pd.Series, low_price: 
         dt_list = pd.Series(close_price.index)
 
         cnn: int = cal_kline_len_single_day(close_price, interval)
-        print(f'>>cnn={cnn}')
+        # print(f'>>cnn={cnn}')
         zd: pd.Series = cal_zd(close_price, n, cnn)
         # print(f'>>zd[-10:]={zd[-10:]}')
-        print(f'>>转震荡信号点={dt_list[np.where((zd == 1) & (MyTT.REF(zd, 1) == 0))[0]]}')
-        print(f'>>结束震荡信号点={dt_list[np.where((zd == 0) & (MyTT.REF(zd, 1) == 1))[0]]}')
+        # print(f'>>转震荡信号点={dt_list[np.where((zd == 1) & (MyTT.REF(zd, 1) == 0))[0]]}')
+        # print(f'>>结束震荡信号点={dt_list[np.where((zd == 0) & (MyTT.REF(zd, 1) == 1))[0]]}')
         cd = close_price - MyTT.REF(close_price, 1)
         buy_v = MyTT.SUM(MyTT.IF(cd > 0, vols, 0), length)
         sell_v = MyTT.SUM(MyTT.IF(cd < 0, vols, 0), length)
@@ -76,16 +119,23 @@ def calculate_signals(close_price: pd.Series, high_price: pd.Series, low_price: 
             close_indexes = np.where((dk_l == -1) | (dk_l == -2))[0]
             final_close_index = close_indexes[-1] if len(close_indexes) > 0 else np.nan  # 最后一个平仓信号的下标
             dt_pre_final = np.nan if np.isnan(pre_final_close_index) else dt_list[pre_final_close_index]
-            print(f'>>pre_final_close_index={pre_final_close_index}({dt_pre_final}), \
-                    final_close_index={final_close_index}({dt_list[final_close_index]})')
+            # print(f'>>pre_final_close_index={pre_final_close_index}({dt_pre_final}), \
+            #         final_close_index={final_close_index}({dt_list[final_close_index]})')
             finish = (final_close_index == pre_final_close_index) or (
                     np.isnan(final_close_index) and np.isnan(pre_final_close_index))
             pre_final_close_index = final_close_index
         # print(f'>>dk_l[-50:]={dk_l[-50:]}')
-        print(f'>>多开信号={dt_list[np.where(dk_l == 1)[0]]}')
-        print(f'>>多平信号={dt_list[np.where(dk_l == -1)[0]]}')
-        print(f'>>空开信号={dt_list[np.where(dk_l == 2)[0]]}')
-        print(f'>>空平信号={dt_list[np.where(dk_l == -2)[0]]}')
+        # print(f'>>多开信号={dt_list[np.where(dk_l == 1)[0]]}')
+        # print(f'>>多平信号={dt_list[np.where(dk_l == -1)[0]]}')
+        # print(f'>>空开信号={dt_list[np.where(dk_l == 2)[0]]}')
+        # print(f'>>空平信号={dt_list[np.where(dk_l == -2)[0]]}')
+
+        # 输出
+        long_open_signals = [True if s == 1 else False for s in dk_l]
+        long_close_signals = [True if s == -1 else False for s in dk_l]
+        short_open_signals = [True if s == 2 else False for s in dk_l]
+        short_close_signals = [True if s == -2 else False for s in dk_l]
+        return long_open_signals, long_close_signals, short_open_signals, short_close_signals
 
 
 def handle_close_operation(dk_l: np.ndarray, vols: pd.Series, low_price: pd.Series, high_price: pd.Series,
@@ -186,13 +236,115 @@ def cal_zd(prices: pd.Series, n: int, cnn: int):
     return zd
 
 
+def convert_to_vbt_freq(interval: Interval) -> VbtFreq:
+    """转换为vbt的freq"""
+    vbt_freq: VbtFreq = VbtFreq.DAILY
+    if interval == Interval.MINUTE5:
+        vbt_freq = VbtFreq.MINUTE5
+    elif interval == Interval.MINUTE15:
+        vbt_freq = VbtFreq.MINUTE15
+    elif interval == Interval.MINUTE30:
+        vbt_freq = VbtFreq.MINUTE30
+    elif interval == Interval.MINUTE60:
+        vbt_freq = VbtFreq.MINUTE60
+    elif interval == Interval.MINUTE120:
+        vbt_freq = VbtFreq.MINUTE120
+    elif interval == Interval.DAILY:
+        vbt_freq = VbtFreq.DAILY
+
+    return vbt_freq
+
+
+def wrap_execute(symbol: str, start_date: datetime, end_date: datetime, interval: Interval, klines_open: pd.DataFrame,
+                 klines_high: pd.DataFrame, klines_low: pd.DataFrame, klines_close: pd.DataFrame,
+                 klines_vol: pd.DataFrame, params: tuple):
+    execute(symbol, start_date, end_date, interval, klines_open, klines_high, klines_low, klines_close, klines_vol,
+            params[0], params[1], params[2])
+
+
+def wrap_func(symbol: str, start_date: datetime, end_date: datetime, interval: Interval, klines_open: pd.DataFrame,
+              klines_high: pd.DataFrame, klines_low: pd.DataFrame, klines_close: pd.DataFrame,
+              klines_vol: pd.DataFrame) -> Callable:
+    """二次封装：预先配置好部分参数，剩下关键参数待穷举输入"""
+    func: Callable = partial(wrap_execute, symbol, start_date, end_date, interval, klines_open, klines_high,
+                             klines_low, klines_close, klines_vol)
+    return func
+
+
+def do_exhaustion(symbol: str, start_date: datetime, end_date: datetime, interval: Interval, all_param_combs: list,
+                  max_workers: int | None = None):
+    """穷举"""
+    klines_open, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date, end_date,
+                                                                                  interval)
+    execute_func: Callable = wrap_func(symbol, start_date, end_date, interval, klines_open, klines_high, klines_low,
+                                       klines_close, klines_vol)
+
+    start: float = perf_counter()
+    print(f'\n>>>>开始穷举，startDate={start_date.strftime('%Y-%m-%d %H:%M:%S')}，endDate='
+          f'{end_date.strftime('%Y-%m-%d %H:%M:%S')}，size={len(all_param_combs)}')
+    with ProcessPoolExecutor(max_workers, mp_context=get_context("spawn")) as executor:
+        # tqdm(
+        #     executor.map(execute_func, all_param_combs),
+        #     total=len(all_param_combs)
+        # )  # 多进程中直接使用tqdm无效，需要使用tqdm.contrib.concurrent下的process_map()
+        executor.map(execute_func, all_param_combs)
+    end: float = perf_counter()
+    cost: int = int(end - start)
+    print(f"\n>>>>穷举算法优化完成，耗时{cost}秒")
+
+
+def get_quarter_end_date(d: datetime):
+    """获取季度末的日期"""
+    month = d.month
+    quarter_end_month = 3
+    if 3 < month <= 6:
+        quarter_end_month = 6
+    elif 6 < month <= 9:
+        quarter_end_month = 9
+    elif 9 < month <= 12:
+        quarter_end_month = 12
+
+    _, num_of_month = calendar.monthrange(d.year, quarter_end_month)
+
+    return datetime(d.year, quarter_end_month, num_of_month, 15, 0, 0, 0)
+
+
+def batch_tasks(period: PeriodType = PeriodType.Quarter):
+    """批量任务"""
+    # 一般参数
+    backtest_year = 3
+    startDate = datetime(2025, 4, 23, 9, 0, 0)
+    endDate = datetime(2025, 6, 30, 15, 0, 0)
+    interval = Interval.MINUTE60
+
+    # 需要穷举的参数范围
+    length_list = generate_param_comb(20, 300, 10)
+    stpr_list = generate_param_comb(20, 50, 5)
+    n_list = generate_param_comb(20, 90, 10)
+    all_param_combs = list(product(length_list, stpr_list, n_list))
+
+    _end_date = startDate
+    if period == PeriodType.Quarter:
+        _end_date = get_quarter_end_date(startDate)
+
+    while _end_date <= endDate:
+        _startDate = _end_date.replace(year=_end_date.year - backtest_year, hour=9, minute=0, second=0,
+                                       microsecond=0) + timedelta(days=1)
+        do_exhaustion('RBL9', _startDate, _end_date, interval, all_param_combs)
+
+        _end_date = get_quarter_end_date(_end_date + timedelta(days=1))
+
+
 if __name__ == "__main__":
     """"""
     t0 = datetime.now()
 
     startDate = datetime(2024, 1, 1, 9, 0, 0)
     endDate = datetime(2025, 4, 23, 15, 0, 0)
-    execute('RBL9', startDate, endDate, Interval.MINUTE60, 250, 20, 70)
+    execute('RBL9', startDate, endDate, Interval.MINUTE60, length=250, stpr=20, n=70)
+
+    # 多进程并行
+    # batch_tasks()
 
     t1 = datetime.now()
     print(f'\n>>>>>>总耗时{t1 - t0}s')
