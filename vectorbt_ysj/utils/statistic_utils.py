@@ -1,8 +1,11 @@
 from datetime import date
 
 import numpy as np
+import pandas as pd
 from pandas import DataFrame, Series
 from pandas.core.window import ExponentialMovingWindow
+
+from vectorbt_ysj.common.constant import Interval, LAST_BAR_START_TIME_MAP
 
 
 def calculate_statistics(
@@ -204,3 +207,22 @@ def calculate_statistics(
 
     print("策略统计指标计算完成")
     return statistics
+
+
+def generate_daily_pnl(asset_value: pd.Series, interval: Interval, init_cash: float) -> pd.DataFrame:
+    """根据总资产序列构建每日盈亏"""
+    last_bar_start_time = LAST_BAR_START_TIME_MAP[interval]  # 每个交易日最后一根K线的起始时间
+    key_date = 'date'
+    key_pnl = 'net_pnl'
+
+    daily_pnl_dict: dict[str: list] = {key_date: [], key_pnl: []}
+    pre_value = init_cash  # 前一个交易日收盘时的总资产
+    for index, value in asset_value.items():
+        if index.hour == last_bar_start_time[0] and index.minute == last_bar_start_time[1]:
+            daily_pnl_dict[key_date].append(index.date())
+            daily_pnl_dict[key_pnl].append(value - pre_value)
+            pre_value = value
+
+    daily_pnl: pd.DataFrame = pd.DataFrame(daily_pnl_dict).set_index('date')
+
+    return daily_pnl

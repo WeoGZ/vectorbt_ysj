@@ -1,7 +1,7 @@
 import json
 import sys
 
-from vectorbt_ysj.common.constant import Interval
+from vectorbt_ysj.common.constant import Interval, VbtFreq
 
 
 def generate_param_comb(start_value: float, end_value: float, step: float) -> list[float]:
@@ -32,6 +32,25 @@ def convert2dict(param_str: str) -> dict | None:
         param_str = param_str.replace("'", '"')
         param_dict = json.loads(param_str)
         return param_dict
+
+
+def convert_to_vbt_freq(interval: Interval) -> VbtFreq:
+    """转换为vbt的freq"""
+    vbt_freq: VbtFreq = VbtFreq.DAILY
+    if interval == Interval.MINUTE5:
+        vbt_freq = VbtFreq.MINUTE5
+    elif interval == Interval.MINUTE15:
+        vbt_freq = VbtFreq.MINUTE15
+    elif interval == Interval.MINUTE30:
+        vbt_freq = VbtFreq.MINUTE30
+    elif interval == Interval.MINUTE60:
+        vbt_freq = VbtFreq.MINUTE60
+    elif interval == Interval.MINUTE120:
+        vbt_freq = VbtFreq.MINUTE120
+    elif interval == Interval.DAILY:
+        vbt_freq = VbtFreq.DAILY
+
+    return vbt_freq
 
 
 if __name__ == '__main__':

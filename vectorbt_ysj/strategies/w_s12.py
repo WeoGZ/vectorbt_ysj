@@ -37,18 +37,18 @@ pd.set_option('Display.max_columns', None)  # 展示全部列
 def execute(symbol: str, init_cash: float, start_date: datetime, end_date: datetime, interval: Interval,
             klines_open: pd.DataFrame = None, klines_high: pd.DataFrame = None, klines_low: pd.DataFrame = None,
             klines_close: pd.DataFrame = None, klines_vol: pd.DataFrame = None,
-            length: int = 0, stpr: int = 0, n: int = 0) -> tuple | None:
+            length: int = 0, stpr: int = 0) -> tuple | None:
     """程序入口"""
     if klines_close is None:
         # preload_days = (math.ceil(length / KLINE_SIZE_PER_DAY_MAP[interval]) + 60) * (31 / 21)  # 换算成自然日数量
-        preload_days = (n / 5 + 1) * 30  # 参数n数值每5大概所需1个月数据计算，在换算成自然日。额外补一个月。
+        preload_days = 3 * 30  # 预加载3个月
         klines_open, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date,
                                                                                       end_date, interval, preload_days)
     if klines_close is not None and not klines_close.empty:
         # print(f'>>total_len={len(klines_close)}')
         long_open_signals, long_close_signals, short_open_signals, short_close_signals = calculate_signals(
             klines_close[symbol], klines_high[symbol], klines_low[symbol], klines_vol[symbol],
-            interval, length, stpr, n)
+            interval, length, stpr)
 
         long_entries = pd.Series(long_open_signals, index=klines_close.index)
         long_exits = pd.Series(long_close_signals, index=klines_close.index)
@@ -112,7 +112,7 @@ def execute(symbol: str, init_cash: float, start_date: datetime, end_date: datet
         #       f'zf_year1: {zf_year1:.4f}, zf_year2: {zf_year2:.4f}, zf_year3: {zf_year3:.4f}')
 
         # 穷举的参数
-        params_dict = {'len': length, 'stpr': stpr, 'n': n}
+        params_dict = {'len': length, 'stpr': stpr}
         # 每日盈亏
         daily_pnl = generate_daily_pnl(asset_values, interval, init_cash)
         sharpe_ratio = calculate_statistics(daily_pnl, init_cash, 242, 0, False)['sharpe_ratio']
@@ -121,11 +121,11 @@ def execute(symbol: str, init_cash: float, start_date: datetime, end_date: datet
         # print(f'\n>>[len={length}, stpr={stpr}, n={n}]\n{total_portfolio.stats()}')
         signal_count = len(total_portfolio.trades.records_readable)  # 信号对数（一买一卖为一对）
         print(f'\n>>[symbol={symbol}, interval={interval.value}, start={convert2_datetime_str(start_date)}, '
-              f'end={convert2_datetime_str(end_date)}, init_cash={init_cash}, len={length}, stpr={stpr}, n={n}]'
+              f'end={convert2_datetime_str(end_date)}, init_cash={init_cash}, len={length}, stpr={stpr}]'
               f'\n总盈利={total_portfolio.total_profit():.2f}, 夏普比率={sharpe_ratio:.2f}, count={signal_count}')
         # print(f'\n>>总资产={total_portfolio.value()}')
         # print(f'\n>>asset_value={total_portfolio.asset_value()}')
-        # print(f'\n>>trades=\n{total_portfolio.trades.records_readable}')  # 每笔交易的明细
+        print(f'\n>>trades=\n{total_portfolio.trades.records_readable}')  # 每笔交易的明细
         # print(f'\n>>trades.pnl=\n{total_portfolio.trades.pnl.values}')  # 每笔交易的盈亏
         # print(f'\n>>daily_returns=\n{total_portfolio.daily_returns()}')  # 每日涨幅。但包含了周六日，数值为NaN
         # print(f'\n>>daily_pnl={daily_pnl}, sharpe_ratio={sharpe_ratio:.2f}')  # 每日盈亏，vnpy方式计算的夏普比率
@@ -141,17 +141,11 @@ def execute(symbol: str, init_cash: float, start_date: datetime, end_date: datet
 
 
 def calculate_signals(close_price: pd.Series, high_price: pd.Series, low_price: pd.Series, vols: pd.Series,
-                      interval: Interval, length: int, stpr: int, n: int):
+                      interval: Interval, length: int, stpr: int):
     """计算交易信号"""
     if close_price is not None and not close_price.empty:
         dt_list = pd.Series(close_price.index)
 
-        cnn: int = cal_kline_len_single_day(close_price, interval)
-        # print(f'>>cnn={cnn}')
-        zd: pd.Series = cal_zd(close_price, n, cnn)
-        # print(f'>>zd[-10:]={zd[-10:]}')
-        # print(f'>>转震荡信号点={dt_list[np.where((zd == 1) & (MyTT.REF(zd, 1) == 0))[0]]}')
-        # print(f'>>结束震荡信号点={dt_list[np.where((zd == 0) & (MyTT.REF(zd, 1) == 1))[0]]}')
         cd = close_price - MyTT.REF(close_price, 1)
         buy_v = MyTT.SUM(MyTT.IF(cd > 0, vols, 0), length)
         sell_v = MyTT.SUM(MyTT.IF(cd < 0, vols, 0), length)
@@ -174,8 +168,8 @@ def calculate_signals(close_price: pd.Series, high_price: pd.Series, low_price: 
         op_s = MyTT.BARSLAST(crossdown_bsr_msl)
 
         # 开仓信号
-        bkcon = [True if i == 0 and j == 0 else False for i, j in zip(op_l, zd)]  # 多头开仓
-        skcon = [True if i == 0 and j == 0 else False for i, j in zip(op_s, zd)]  # 空头开仓
+        bkcon = [True if i == 0 else False for i in op_l]  # 多头开仓
+        skcon = [True if i == 0 else False for i in op_s]  # 空头开仓
 
         # 平仓信号——止盈止损
         stbar = 40
@@ -185,7 +179,7 @@ def calculate_signals(close_price: pd.Series, high_price: pd.Series, low_price: 
         pre_final_close_index = np.nan
         finish = False
         while not finish:
-            dk_l = handle_close_operation(dk_l, vols, low_price, high_price, zd, stpr, stbar)
+            dk_l = handle_close_operation(dk_l, vols, low_price, high_price, stpr, stbar)
             close_indexes = np.where((dk_l == -1) | (dk_l == -2))[0]
             final_close_index = close_indexes[-1] if len(close_indexes) > 0 else np.nan  # 最后一个平仓信号的下标
             # dt_pre_final = np.nan if np.isnan(pre_final_close_index) else dt_list[pre_final_close_index]
@@ -209,7 +203,7 @@ def calculate_signals(close_price: pd.Series, high_price: pd.Series, low_price: 
 
 
 def handle_close_operation(dk_l: np.ndarray, vols: pd.Series, low_price: pd.Series, high_price: pd.Series,
-                           zd: pd.Series, stpr: int, stbar: int):
+                           stpr: int, stbar: int):
     """更新出场信号（多单的平仓信号是-1、空单是-2），以及将平仓信号前的重复开仓信号置为0。注意：此函数每次只处理一个多/空信号。"""
     cumsum_dk_l = MyTT.SUM(dk_l, 0)
     cn_l = MyTT.IF(cumsum_dk_l > 0, MyTT.BARSLAST(MyTT.CROSS(cumsum_dk_l, 0)), np.nan)  # 最近一次交叉信号的位置
@@ -225,92 +219,17 @@ def handle_close_operation(dk_l: np.ndarray, vols: pd.Series, low_price: pd.Seri
     close_con = MyTT.IF(signal == 1, low_price.values <= vwap_l,
                         MyTT.IF(signal == 2, high_price.values >= vwap_l, np.nan))
     cnt_close = MyTT_plus.SUM(close_con, cn_l)  # 开仓后触发出场条件的次数
-    con1 = (zd == 1) & (MyTT.REF(zd, 1) == 0) & (cnt_close == 0)  # 转震荡（首次触发出场条件前）
-    con2 = (close_con == 1) & (cnt_close == 1) & (MyTT_plus.SUM(con1, cn_l) == 0)  # 首次触发出场条件（之前没有转震荡信号）
-    con = con1 | con2
+    con = (close_con == 1) & (cnt_close == 1)  # 首次触发出场条件
     dk_l_2 = MyTT.IF(cn_l > 0, MyTT.IF(con, MyTT.IF(signal == 1, -1, -2), MyTT.IF(cnt_close == 0, 0, dk_l)),
                      dk_l)  # 更新出场信号，以及将平仓信号前的重复开仓信号置为0
     return dk_l_2
-
-
-def cal_kline_len_single_day(prices: pd.Series, interval: Interval):
-    """计算单个交易日有多少根K线。以螺纹钢60分钟为例，返回6"""
-    if prices is not None and not prices.empty:
-        start_time_array: tuple = LAST_BAR_START_TIME_MAP[interval]
-
-        # 不同品种的起始交易时间不同，夜盘品种是21:00:00、日盘品种是9:00:00或9:30:00
-        start_hour = 9
-        start_minute = 0
-        # 判断是否有夜盘K线
-        night_bars_count = prices[prices.index.hour >= 21].size
-        day_minutes: list[int] = [index.minute for index, value in prices.items() if index.hour == 9]
-        if night_bars_count > 0:
-            start_hour = 21
-        elif len(day_minutes) > 0:
-            start_minute = min(day_minutes)
-
-        cal_day = 3  # 取最近3个交易日
-        already_cal_day = 0
-        kline_len_per_day: list[int] = []
-        start_index = -1
-        end_index = -1
-        for i in range(len(prices) - 1, -1, -1):
-            if (prices.index[i].hour == start_time_array[0] and prices.index[i].minute == start_time_array[1] and
-                    prices.index[i].second == 0):
-                end_index = i
-            elif (prices.index[i].hour == start_hour and prices.index[i].minute == start_minute and
-                  prices.index[i].second == 0 and end_index != -1):
-                start_index = i
-            if start_index != -1 and end_index != -1:
-                already_cal_day += 1
-                kline_len_per_day.append(end_index - start_index + 1)  # 计算单个交易日所含K线数量
-                start_index = -1
-                end_index = -1
-                if already_cal_day >= cal_day:
-                    break
-
-        return math.ceil(max(kline_len_per_day))
-
-
-def cal_zd(prices: pd.Series, n: int, cnn: int):
-    """计算是否震荡"""
-    zf: pd.Series = MyTT.LN(prices / MyTT.REF(prices, 1)) * 100
-    vlt = MyTT.STD(zf, cnn * n) * MyTT.SQRT(252 * cnn)
-    ma_vlt = MyTT.MA(vlt, math.floor(n / 3) * cnn)
-    ln1 = max(3, math.floor(cnn / 2))
-
-    # 波动率波峰/波谷拐点
-    bf_right = MyTT.REF(ma_vlt, ln1) > MyTT.HHV(ma_vlt, ln1)  # 波峰结构的右边
-    bg_right = MyTT.REF(ma_vlt, ln1) < MyTT.LLV(ma_vlt, ln1)  # 波谷结构的右边
-    bf_left = pd.Series(MyTT.REF(ma_vlt >= MyTT_plus.HV(ma_vlt, ln1), ln1))
-    bf_left2 = pd.Series(MyTT.REF(ma_vlt >= MyTT_plus.HV(ma_vlt, 20 * cnn), ln1))
-    bg_left = pd.Series(MyTT.REF(ma_vlt <= MyTT_plus.LV(ma_vlt, ln1), ln1))
-    bg_left2 = pd.Series(MyTT.REF(ma_vlt <= MyTT_plus.LV(ma_vlt, 20 * cnn), ln1))
-    turn_tag = MyTT.IF(bf_right & bf_left & bf_left2, 1, MyTT.IF(bg_right & bg_left & bg_left2, -1, np.nan))
-
-    hvlt_temp = MyTT.BARSLAST(turn_tag == 1)
-    hvlt = MyTT_plus.REF(ma_vlt, hvlt_temp + ln1)
-    lvlt_temp = MyTT.BARSLAST(turn_tag == -1)
-    lvlt = MyTT_plus.REF(ma_vlt, lvlt_temp + ln1)
-    ln2 = 20
-    fd1 = MyTT.IF(turn_tag == 1, (hvlt / lvlt - 1) * 100, np.nan)
-    fd2 = MyTT.IF(turn_tag == -1, (lvlt / hvlt - 1) * 100, np.nan)
-    zd = MyTT.IF(fd1 >= ln2, 1, MyTT.IF(fd2 <= -ln2, 0, np.nan))
-    # zd特殊处理1：当等于nan时取前一个有效值
-    for i in range(1, len(zd)):
-        if np.isnan(zd[i]) and not np.isnan(zd[i - 1]):
-            zd[i] = zd[i - 1]
-    # zd特殊处理2：起始段的nan置为0，否则会出现由于加载数据不足导致起始段zd值为nan的情况
-    zd = np.nan_to_num(zd)
-
-    return zd
 
 
 def wrap_execute(symbol: str, init_cash: float, start_date: datetime, end_date: datetime, interval: Interval,
                  klines_open: pd.DataFrame, klines_high: pd.DataFrame, klines_low: pd.DataFrame,
                  klines_close: pd.DataFrame, klines_vol: pd.DataFrame, params: tuple) -> tuple:
     return execute(symbol, init_cash, start_date, end_date, interval, klines_open, klines_high, klines_low,
-                   klines_close, klines_vol, params[0], params[1], params[2])
+                   klines_close, klines_vol, params[0], params[1])
 
 
 def wrap_func(symbol: str, init_cash: float, start_date: datetime, end_date: datetime, interval: Interval,
@@ -370,8 +289,7 @@ def batch_tasks(period: PeriodType = PeriodType.Quarter):
     # 需要穷举的参数范围
     length_list = generate_param_comb(20, 300, 20)
     stpr_list = generate_param_comb(20, 50, 10)
-    n_list = generate_param_comb(20, 90, 10)
-    all_param_combs = list(product(length_list, stpr_list, n_list))
+    all_param_combs = list(product(length_list, stpr_list))
 
     _end_date_temp = start_date
     if period == PeriodType.Quarter:
@@ -400,13 +318,13 @@ def combinatorial_test_two_types():
     init_cash = 60000
     interval = Interval.MINUTE60
     params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count = (
-        execute(symbol, init_cash, start_date, end_date, interval, length=250, stpr=20, n=70))
+        execute(symbol, init_cash, start_date, end_date, interval, length=250, stpr=20))
 
     symbol2 = 'SAL9'
     init_cash2 = 60000
     interval2 = Interval.MINUTE60
     params_dict2, sharpe_ratio2, zf_year1_2, zf_year2_2, zf_year3_2, daily_pnl2, signal_count2 = (
-        execute(symbol2, init_cash2, start_date, end_date, interval2, length=50, stpr=15, n=20))
+        execute(symbol2, init_cash2, start_date, end_date, interval2, length=50, stpr=15))
 
     # 组合测试
     total_daily_pnl = daily_pnl.add(daily_pnl2)
@@ -417,16 +335,15 @@ def combinatorial_test_two_types():
 
 def single_test():
     """单品种测试"""
-    symbol = 'AOL9'  # RBL9、SAL9、AOL9
-    init_cash = 120000  # 90000、90000、120000
-    length = 140  # RBL9:(250,20,70)、SAL9:(50,15,20)、AOL9:(130,40,20)
-    stpr = 40
-    n = 20
+    symbol = 'RBL9'  # RBL9、SAL9、AOL9
+    init_cash = 90000  # 90000、90000、120000
+    length = 250  # RBL9:(250,20)、SAL9:(50,15,20)、AOL9:(130,40,20)
+    stpr = 20
     interval = Interval.MINUTE30
-    start_date = datetime(2022, 4, 1, 9, 0, 0)
-    end_date = datetime(2025, 3, 31, 15, 0, 0)
+    start_date = datetime(2025, 1, 1, 9, 0, 0)
+    end_date = datetime(2025, 5, 14, 15, 0, 0)
     params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, count = (
-        execute(symbol, init_cash, start_date, end_date, interval, length=length, stpr=stpr, n=n))
+        execute(symbol, init_cash, start_date, end_date, interval, length=length, stpr=stpr))
 
     # result = [(params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3)]
     # save_table_optimization(result, os.path.basename(__file__), symbol, interval.value, start_date, end_date,
@@ -438,13 +355,13 @@ if __name__ == "__main__":
     t0 = datetime.now()
 
     # 单品种测试
-    # single_test()
+    single_test()
 
     # 组合测试
     # combinatorial_test_two_types()
 
     # 多进程并行
-    batch_tasks()
+    # batch_tasks()
 
     t1 = datetime.now()
     print(f'\n>>>>>>总耗时{t1 - t0}s, now={t1}')
