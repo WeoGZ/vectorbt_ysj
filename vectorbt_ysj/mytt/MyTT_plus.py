@@ -19,7 +19,7 @@ def HHV(S, N):  #HHV,支持N为序列版本
     HHV(C, 5)  # 最近5天收盘最高价
     """
     if isinstance(N, (int, float)):
-        return pd.Series(S).rolling(N).max().values
+        return pd.Series(S).rolling(N, 1).max().values
     else:
         res = np.repeat(np.nan, len(S))
         for i in range(len(S)):
@@ -35,7 +35,7 @@ def LLV(S, N):   #LLV,支持N为序列版本
     LLV(C, 5)  # 最近5天收盘最低价
     """
     if isinstance(N, (int, float)):
-        return pd.Series(S).rolling(N).min().values
+        return pd.Series(S).rolling(N, 1).min().values
     else:
         res = np.repeat(np.nan, len(S))
         for i in range(len(S)):

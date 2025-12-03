@@ -40,28 +40,28 @@ def DIFF(S, N=1):         #前一个值减后一个值,前面会产生nan
     return pd.Series(S).diff(N).values     #np.diff(S)直接删除nan，会少一行
 
 def STD(S,N):             #求序列的N日标准差，返回序列    
-    return  pd.Series(S).rolling(N).std(ddof=0).values     
+    return  pd.Series(S).rolling(N).std(ddof=1).values  # ddof=1表示样本标准差，0表示总体标准差
 
 def SUM(S, N):            #对序列求N天累计和，返回序列    N=0对序列所有依次求和         
-    return pd.Series(S).rolling(N).sum().values if N>0 else pd.Series(S).cumsum().values  
+    return pd.Series(S).rolling(N, 1).sum().values if N>0 else pd.Series(S).cumsum().values
 
 def CONST(S):             #返回序列S最后的值组成常量序列
     return np.full(len(S),S[-1])
   
 def HHV(S,N):             #HHV(C, 5) 最近5天收盘最高价        
-    return pd.Series(S).rolling(N).max().values     
+    return pd.Series(S).rolling(N, 1).max().values
 
 def LLV(S,N):             #LLV(C, 5) 最近5天收盘最低价     
-    return pd.Series(S).rolling(N).min().values    
+    return pd.Series(S).rolling(N, 1).min().values
     
 def HHVBARS(S,N):         #求N周期内S最高值到当前周期数, 返回序列
-    return pd.Series(S).rolling(N).apply(lambda x: np.argmax(x[::-1]),raw=True).values 
+    return pd.Series(S).rolling(N, 1).apply(lambda x: np.argmax(x[::-1]),raw=True).values
 
 def LLVBARS(S,N):         #求N周期内S最低值到当前周期数, 返回序列
-    return pd.Series(S).rolling(N).apply(lambda x: np.argmin(x[::-1]),raw=True).values    
+    return pd.Series(S).rolling(N, 1).apply(lambda x: np.argmin(x[::-1]),raw=True).values
   
 def MA(S,N):              #求序列的N日简单移动平均值，返回序列                    
-    return pd.Series(S).rolling(N).mean().values  
+    return pd.Series(S).rolling(N, 1).mean().values
   
 def EMA(S,N):             #指数移动平均,为了精度 S>4*N  EMA至少需要120周期     alpha=2/(span+1)    
     return pd.Series(S).ewm(span=N, adjust=False).mean().values     

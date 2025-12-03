@@ -1,4 +1,7 @@
+import json
 import sys
+
+from vectorbt_ysj.common.constant import Interval
 
 
 def generate_param_comb(start_value: float, end_value: float, step: float) -> list[float]:
@@ -14,6 +17,21 @@ def generate_param_comb(start_value: float, end_value: float, step: float) -> li
         _value += step
 
     return combs
+
+
+def find_interval(interval_str: str) -> Interval:
+    """根据Interval的值找到相应的枚举对象"""
+    for name, member in Interval.__members__.items():
+        if member.value == interval_str:
+            return member
+
+
+def convert2dict(param_str: str) -> dict | None:
+    """转换格式"""
+    if param_str:
+        param_str = param_str.replace("'", '"')
+        param_dict = json.loads(param_str)
+        return param_dict
 
 
 if __name__ == '__main__':
