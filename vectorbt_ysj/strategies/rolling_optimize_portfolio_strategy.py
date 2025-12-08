@@ -12,7 +12,7 @@ from vectorbt_ysj.utils.param_utils import *
 from vectorbt_ysj.utils.statistic_utils import calculate_statistics
 
 
-def execute1(strategy_name: str, futures: list, start_date: datetime, end_date: datetime) -> pd.DataFrame | None:
+def execute1(strategy_name: str, futures: list, start_date: datetime, end_date: datetime):
     """每个季度优化一次，对每个品种均选取夏普比率最高的一个策略（同一品种多个周期的也是选出一个）"""
     if futures is None or len(futures) == 0:
         print(f'***前检查参数futures')
@@ -21,17 +21,6 @@ def execute1(strategy_name: str, futures: list, start_date: datetime, end_date: 
         print(f'***请检查日期参数')
         return
 
-    db_engine = create_engine('mysql+pymysql://root:%s@localhost:3306/vnpy' % parse.quote_plus('admin'))
-    symbols_str = "','".join(futures)
-    query_sql = ("SELECT t1.vt_symbol,t1.period,t1.start_date,t1.end_date,t1.target,t1.target_value,t1.params,"
-                 "t1.zf_year1,t1.zf_year2,t1.zf_year3,t1.count,t1.init_cash "
-                 "FROM optimization_data t1 LEFT JOIN ("
-                 "SELECT vt_symbol,MAX(target_value) as sp "
-                 "FROM optimization_data "
-                 "WHERE strategy='%s' AND vt_symbol in ('%s') AND end_date='%s' AND target_value>0 GROUP BY vt_symbol) AS t2 "
-                 "ON t1.target_value=t2.sp "
-                 "WHERE t2.sp IS NOT NULL "
-                 "ORDER BY t1.vt_symbol,t1.params;")
     start_date = start_date.replace(hour=15, minute=0, second=0, microsecond=0)
     end_date = end_date.replace(hour=15, minute=0, second=0, microsecond=0)
     train_end_month = start_date.month - 3 if start_date.month - 3 > 0 else start_date.month + 9
@@ -50,8 +39,7 @@ def execute1(strategy_name: str, futures: list, start_date: datetime, end_date: 
 
     while train_end_date <= verify_end_date:
         print_str = f'>>train_end_date={train_end_date}'
-        db_records = pd.read_sql_query(
-            query_sql % (strategy_name, symbols_str, convert2_datetime_str(train_end_date)), db_engine)
+        db_records = query_db_records(strategy_name, futures, train_end_date)
         if db_records is not None and len(db_records) > 0:
             _start_date = start_date.replace(hour=9) if _start_date is None else (
                     train_end_date.replace(hour=9) + timedelta(days=1))
@@ -99,6 +87,25 @@ def combinatorial_test(db_records: pd.DataFrame, start_date: datetime, end_date:
             best_comb_infos[symbol] = f'{db_records.iloc[i]['period']}#{db_records.iloc[i]['params']}'
 
         return total_daily_pnl, total_init_cash, best_comb_infos
+
+
+def query_db_records(strategy_name: str, futures: list, train_end_date: datetime) -> pd.DataFrame | None:
+    """查询记录"""
+    db_engine = create_engine('mysql+pymysql://root:%s@localhost:3306/vnpy' % parse.quote_plus('admin'))
+    symbols_str = "','".join(futures)
+    query_sql = ("SELECT t1.vt_symbol,t1.period,t1.start_date,t1.end_date,t1.target,t1.target_value,t1.params,"
+                 "t1.zf_year1,t1.zf_year2,t1.zf_year3,t1.count,t1.init_cash "
+                 "FROM optimization_data t1 LEFT JOIN ("
+                 "SELECT vt_symbol,MAX(target_value) as sp "
+                 "FROM optimization_data "
+                 "WHERE strategy='%s' AND vt_symbol in ('%s') AND end_date='%s' AND target_value>0 GROUP BY vt_symbol) AS t2 "
+                 "ON t1.target_value=t2.sp "
+                 "WHERE t2.sp IS NOT NULL "
+                 "ORDER BY t1.vt_symbol,t1.params;")
+    db_records = pd.read_sql_query(query_sql % (strategy_name, symbols_str, convert2_datetime_str(train_end_date)),
+                                   db_engine)
+
+    return db_records
 
 
 def print_comb_infos(comb_infos: dict) -> None:

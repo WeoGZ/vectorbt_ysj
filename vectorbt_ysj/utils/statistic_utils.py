@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 from pandas.core.window import ExponentialMovingWindow
+from vectorbt import Portfolio
 
 from vectorbt_ysj.common.constant import Interval, LAST_BAR_START_TIME_MAP
 
@@ -226,3 +227,27 @@ def generate_daily_pnl(asset_value: pd.Series, interval: Interval, init_cash: fl
     daily_pnl: pd.DataFrame = pd.DataFrame(daily_pnl_dict).set_index('date')
 
     return daily_pnl
+
+
+def calculate_max_drawdown(total_portfolio: Portfolio, return_type: int = 0, output: bool = False) -> float:
+    """计算最大回撤相关指标。return_type：0-最大回撤值，1-最大回撤幅度"""
+    # 最大回撤
+    # drawdown = total_portfolio.drawdowns
+    # id_max_dd = np.argmin(drawdown.drawdown.values)  # 最大回撤幅度所在的下标
+    # peak_val_max_dd = drawdown.get_field_arr('peak_val')[id_max_dd]
+    # valley_val_max_dd = drawdown.get_field_arr('valley_val')[id_max_dd]
+    # max_dd = drawdown.max_drawdown()
+    dr = total_portfolio.drawdowns.records_readable
+    dr['fall_val'] = dr['Valley Value'] - dr['Peak Value']
+    dr['fall_per'] = dr['Valley Value'] / dr['Peak Value'] - 1
+    peak_val_max_dd = dr['Peak Value'].iloc[dr['fall_val'].idxmin()]
+    valley_val_max_dd = dr['Valley Value'].iloc[dr['fall_val'].idxmin()]
+    max_ddv = dr['fall_val'].min()
+    max_dd = dr['fall_per'].min()
+
+    if output:
+        print(f'\n>>最大回撤峰值={peak_val_max_dd:.2f}，最大回撤谷值={valley_val_max_dd:.2f}，最大回撤值='
+              f'{max_ddv:.2f}，最大回撤幅度={max_dd * 100:.2f}%')
+
+    return_val = max_ddv if return_type == 0 else max_dd
+    return return_val

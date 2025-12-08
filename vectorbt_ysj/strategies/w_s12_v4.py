@@ -116,13 +116,19 @@ def execute(symbol: str, init_cash: float, start_date: datetime, end_date: datet
         # 每日盈亏
         daily_pnl = generate_daily_pnl(asset_values, interval, init_cash)
         sharpe_ratio = calculate_statistics(daily_pnl, init_cash, 242, 0, False)['sharpe_ratio']
+        # 信号数量
+        signal_count = len(total_portfolio.trades.records_readable)  # 信号对数（一买一卖为一对）
+        winning_count = len(total_portfolio.trades.winning)
+        win_rate = 0 if signal_count == 0 else winning_count / signal_count
+        # 最大回撤
+        max_ddv = calculate_max_drawdown(total_portfolio, return_type=0, output=False)
 
         # 打印
         # print(f'\n>>[len={length}, stpr={stpr}, n={n}]\n{total_portfolio.stats()}')
-        signal_count = len(total_portfolio.trades.records_readable)  # 信号对数（一买一卖为一对）
         print(f'\n>>[symbol={symbol}, interval={interval.value}, start={convert2_datetime_str(start_date)}, '
-              f'end={convert2_datetime_str(end_date)}, init_cash={init_cash}, len={length}, stpr={stpr}, n={n}]'
-              f'\n总盈利={total_portfolio.total_profit():.2f}, 夏普比率={sharpe_ratio:.2f}, count={signal_count}')
+              f'end={convert2_datetime_str(end_date)}, init_cash={init_cash}, len={length}, stpr={stpr}]'
+              f'\n总盈利={total_portfolio.total_profit():.2f}, 夏普比率={sharpe_ratio:.2f}, count={signal_count}, '
+              f'winning_count={winning_count}，胜率={win_rate * 100:.2f}%, 最大回撤值={max_ddv:.2f}')
         # print(f'\n>>总资产={total_portfolio.value()}')
         # print(f'\n>>asset_value={total_portfolio.asset_value()}')
         # print(f'\n>>trades=\n{total_portfolio.trades.records_readable}')  # 每笔交易的明细
@@ -137,7 +143,7 @@ def execute(symbol: str, init_cash: float, start_date: datetime, end_date: datet
         # total_portfolio.plot_trade_pnl(symbol)  # 未成功
         # total_portfolio.trades.plot()  # 未成功
 
-        return params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count
+        return params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count, winning_count
 
 
 def calculate_signals(close_price: pd.Series, high_price: pd.Series, low_price: pd.Series, vols: pd.Series,
@@ -330,10 +336,19 @@ def do_exhaustion(symbol: str, init_cash: float, start_date: datetime, end_date:
     klines_open, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date, end_date,
                                                                                   interval, preload_days)
     if klines_close.empty:
-        print(f'###{symbol}没有K线数据, start={convert2_datetime_str(start_date)}, end={convert2_datetime_str(end_date)}')
+        print(f'###{symbol}没有K线数据, start={convert2_datetime_str(start_date)}, end={convert2_datetime_str(end_date)}, '
+              f'interval={interval.value}')
         return
     execute_func: Callable = wrap_func(symbol, init_cash, start_date, end_date, interval, klines_open, klines_high,
                                        klines_low, klines_close, klines_vol)
+    strategy_name = os.path.basename(__file__)
+
+    # 查看数据库是否已存在记录
+    existed = query_optimization_exist(strategy_name, symbol, interval.value, start_date, end_date, save_remark)
+    if existed:
+        print(f'###数据库已有记录，跳过。>>[{strategy_name}, {symbol}, {interval.value}, {start_date}, {end_date}, '
+              f'{save_remark}]')
+        return
 
     start: float = perf_counter()
     results: list[tuple]
@@ -352,20 +367,20 @@ def do_exhaustion(symbol: str, init_cash: float, start_date: datetime, end_date:
     print(f"\n>>>>穷举算法优化完成，耗时{cost}秒")
 
     if results is not None and len(results) > 0:
-        save_table_optimization(results[:20], os.path.basename(__file__), symbol, interval.value, init_cash,
+        save_table_optimization(results[:20], strategy_name, symbol, interval.value, init_cash,
                                 start_date, end_date, 'sharpe_ratio', save_remark, datetime.now())  # 保存前20名
 
 
 def batch_tasks(period: PeriodType = PeriodType.Quarter):
     """批量任务"""
     # 一般参数
-    symbols = ['AOL9']
-    # symbols = ['RBL9', 'SAL9', 'AOL9']
-    init_cashes = [120000, 90000, 120000]  # vbt不支持保证金制度计算，因此需要按照1手的实际价值来算（大致是文华保证金制度下所需资金的6倍）
+    # symbols = ['AOL9']
+    symbols = ['RBL9', 'SAL9', 'AOL9']
+    init_cashes = [90000, 90000, 120000]  # vbt不支持保证金制度计算，因此需要按照1手的实际价值来算（大致是文华保证金制度下所需资金的6倍）
     intervals = [Interval.MINUTE60, Interval.MINUTE30]
     backtest_year = 3
-    start_date = datetime(2022, 12, 23, 9, 0, 0)
-    end_date = datetime(2024, 3, 31, 15, 0, 0)
+    start_date = datetime(2017, 12, 23, 9, 0, 0)
+    end_date = datetime(2022, 9, 30, 15, 0, 0)
 
     # 需要穷举的参数范围
     length_list = generate_param_comb(20, 300, 20)
@@ -399,13 +414,13 @@ def combinatorial_test_two_types():
     symbol = 'RBL9'
     init_cash = 60000
     interval = Interval.MINUTE60
-    params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count = (
+    params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count, win_count = (
         execute(symbol, init_cash, start_date, end_date, interval, length=250, stpr=20, n=70))
 
     symbol2 = 'SAL9'
     init_cash2 = 60000
     interval2 = Interval.MINUTE60
-    params_dict2, sharpe_ratio2, zf_year1_2, zf_year2_2, zf_year3_2, daily_pnl2, signal_count2 = (
+    params_dict2, sharpe_ratio2, zf_year1_2, zf_year2_2, zf_year3_2, daily_pnl2, signal_count2, win_count2 = (
         execute(symbol2, init_cash2, start_date, end_date, interval2, length=50, stpr=15, n=20))
 
     # 组合测试
@@ -425,7 +440,7 @@ def single_test():
     interval = Interval.MINUTE30
     start_date = datetime(2022, 4, 1, 9, 0, 0)
     end_date = datetime(2025, 3, 31, 15, 0, 0)
-    params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, count = (
+    params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, count, win_count = (
         execute(symbol, init_cash, start_date, end_date, interval, length=length, stpr=stpr, n=n))
 
     # result = [(params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3)]
