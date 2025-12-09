@@ -51,5 +51,5 @@ def query_optimization_exist(strategy_class: str, vt_symbol: str, interval: str,
     db_records = pd.read_sql_query(
         query_sql % (strategy_class, vt_symbol, interval, convert2_datetime_str(start_date),
                      convert2_datetime_str(end_date), remark), db_engine)
-    if db_records is not None and len(db_records) > 0:
+    if db_records is not None and len(db_records) > 0 and db_records.iloc[0]['cnt'] > 0:
         return True

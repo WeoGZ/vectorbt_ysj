@@ -1,5 +1,3 @@
-import calendar
-import math
 import os.path
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
@@ -10,9 +8,12 @@ from time import perf_counter
 from typing import Callable
 
 import vectorbt as vbt
-from tqdm import tqdm
 
-from vectorbt_ysj.common.constant import *
+from vectorbt_ysj.common.future_fee import FUTURE_FEE_ALL
+from vectorbt_ysj.common.future_list import FUTURE_LIST_ALL
+from vectorbt_ysj.common.future_size import FUTURE_SIZE_ALL
+from vectorbt_ysj.common.future_slippage import FUTURE_SLIPPAGE_ALL
+from vectorbt_ysj.common.init_cash import INIT_CASH_ALL
 from vectorbt_ysj.utils.date_utils import *
 from vectorbt_ysj.utils.kline_utils import *
 from vectorbt_ysj.utils.param_utils import *
@@ -23,8 +24,6 @@ from vectorbt_ysj.mytt import MyTT, MyTT_plus
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine
-from urllib import parse
 import plotly.io as pio
 
 # 设置渲染器为浏览器
@@ -40,7 +39,6 @@ def execute(symbol: str, init_cash: float, start_date: datetime, end_date: datet
             length: int = 0, stpr: int = 0) -> tuple | None:
     """程序入口"""
     if klines_close is None:
-        # preload_days = (math.ceil(length / KLINE_SIZE_PER_DAY_MAP[interval]) + 60) * (31 / 21)  # 换算成自然日数量
         preload_days = 3 * 30  # 预加载3个月
         klines_open, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date,
                                                                                       end_date, interval, preload_days)
@@ -73,9 +71,9 @@ def execute(symbol: str, init_cash: float, start_date: datetime, end_date: datet
             # cash_sharing=True,
             group_by=True,
             freq=freq,
-            size=FUTURE_SIZE_MAP[symbol] * 1,  # 默认1手
-            fees=FUTURE_FEE_MAP[symbol],
-            slippage=FUTURE_SLIPPAGE_MAP[symbol]
+            size=FUTURE_SIZE_ALL[symbol] * 1,  # 默认1手
+            fees=FUTURE_FEE_ALL[symbol],
+            slippage=FUTURE_SLIPPAGE_ALL[symbol]
         )
 
         # 检测是否爆仓（***暂不使用，因为即使爆仓，计算结果也是大致相同，而且保证金制度下未必爆仓***）
@@ -295,12 +293,14 @@ def batch_tasks(period: PeriodType = PeriodType.Quarter):
     """批量任务"""
     # 一般参数
     # symbols = ['AOL9']
-    symbols = ['RBL9', 'SAL9', 'AOL9']
-    init_cashes = [90000, 90000, 120000]  # vbt不支持保证金制度计算，因此需要按照1手的实际价值来算（大致是文华保证金制度下所需资金的6倍）
+    # symbols = ['RBL9', 'SAL9', 'AOL9']
+    symbols = FUTURE_LIST_ALL
+    # init_cashes = [90000, 90000, 120000]  # vbt不支持保证金制度计算，因此需要按照1手的实际价值来算（大致是文华保证金制度下所需资金的6倍）
+    init_cashes = INIT_CASH_ALL
     intervals = [Interval.MINUTE60, Interval.MINUTE30]
     backtest_year = 3
-    start_date = datetime(2022, 9, 23, 9, 0, 0)
-    end_date = datetime(2022, 9, 30, 15, 0, 0)
+    start_date = datetime(2025, 3, 23, 9, 0, 0)
+    end_date = datetime(2025, 3, 31, 15, 0, 0)
 
     # 需要穷举的参数范围
     length_list = generate_param_comb(20, 300, 20)
@@ -319,7 +319,7 @@ def batch_tasks(period: PeriodType = PeriodType.Quarter):
             while _end_date <= end_date:
                 _startDate = _end_date.replace(year=_end_date.year - backtest_year, hour=9, minute=0, second=0,
                                                microsecond=0) + timedelta(days=1)
-                do_exhaustion(symbols[i], init_cashes[i], _startDate, _end_date, intervals[j], all_param_combs,
+                do_exhaustion(symbols[i], init_cashes[symbols[i]], _startDate, _end_date, intervals[j], all_param_combs,
                               save_remark)
 
                 _end_date = get_quarter_end_date(_end_date + timedelta(days=1))

@@ -1,5 +1,6 @@
 import json
 
+import numpy as np
 import pandas as pd
 import datetime
 
@@ -132,17 +133,42 @@ from vectorbt_ysj.common.future_list import *
 # print(param_dict)
 
 
-df1 = pd.DataFrame({'A': [1, 2, 3]}, index=['a', 'b', 'c'])
-# df1 = pd.DataFrame({'A': [1, 2]}, index=['a', 'b'])
-df2 = pd.DataFrame({'A': [8, 9]}, index=['b', 'c'])
-# df2 = pd.DataFrame({'A': [7, 8, 9]}, index=['a', 'b', 'c'])
-# df3 = df1 + df2
-df3 = df1.add(df2, fill_value=0)
-# df4 = df1._append(df2, ignore_index=False).reset_index().drop_duplicates(subset='index', keep='last').set_index('index')
-df5 = pd.concat([df1, df2])
-print(df3)
-# print('\n', df4)
-print('\n', df5)
+# df1 = pd.DataFrame({'A': [1, 2, 3]}, index=['a', 'b', 'c'])
+# # df1 = pd.DataFrame({'A': [1, 2]}, index=['a', 'b'])
+# df2 = pd.DataFrame({'A': [8, 9]}, index=['b', 'c'])
+# # df2 = pd.DataFrame({'A': [7, 8, 9]}, index=['a', 'b', 'c'])
+# # df3 = df1 + df2
+# df3 = df1.add(df2, fill_value=0)
+# # df4 = df1._append(df2, ignore_index=False).reset_index().drop_duplicates(subset='index', keep='last').set_index('index')
+# df5 = pd.concat([df1, df2])
+# print(df3)
+# # print('\n', df4)
+# print('\n', df5)
 
 
-# print(FUTURE_LIST)
+# print(FUTURE_LIST, '\n', f'size={len(FUTURE_LIST)}')
+
+
+# dict1 = {'a': 10, 'b': 8}
+# dict2 = {'d': 6, 'c': 4}
+# dict3 = {'e': 16, 'f': 14}
+# dict1.update(dict2)
+# dict1.update(dict3)
+# print(dict1)
+
+
+# a = 10
+# b = 0
+# print(f'>>before test')
+# c = a / b
+# print(c)
+# print(f'***分母为0')
+
+ss1 = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+ss2 = np.array([1, 2, 0, 4, 5, 6, 7, 8, 9])
+print(f'>>before test')
+ss3 = ss1 / ss2
+print(f'ss3={ss3}')
+ss4 = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]) * 2
+print(f'ss4={ss4}')
+print(f'{ss4 < ss3}')
