@@ -2,8 +2,8 @@ import calendar
 from datetime import datetime
 
 
-def get_quarter_end_date(d: datetime):
-    """获取季度末的日期"""
+def get_quarter_end_date(d: datetime) -> datetime:
+    """获取季度末的日期，时间固定为15:00:00"""
     month = d.month
     quarter_end_month = 3
     if 3 < month <= 6:

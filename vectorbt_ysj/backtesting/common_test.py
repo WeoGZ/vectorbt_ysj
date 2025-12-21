@@ -25,13 +25,18 @@ from vectorbt_ysj.common.future_list import *
 #
 # dt0 = datetime.datetime(2025, 4, 1, 9, 0, 0, 0)
 #
-# 输出内容
+# # 输出内容
 # print("Timedelta from string:", td_from_str)
 # print("Timedelta from integer and unit:", td_from_int)
 # print("Timedelta from components:", td_from_components)
 # print("Timedelta from datetime.timedelta:", td_from_datetime)
 # print(f'>>out={td_from_str_days / td_from_str}')
 # print(f'>>new time={dt0 + datetime.timedelta(days=-0.5)}')
+
+
+# dt4 = datetime.datetime(2020, 4, 1)
+# dt5 = datetime.datetime(2020, 9, 30)
+# print((dt5 - dt4).days)
 
 
 # price = pd.Series([1., 2., 3., 4., 3., 2., 1.])
@@ -166,9 +171,24 @@ from vectorbt_ysj.common.future_list import *
 
 ss1 = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
 ss2 = np.array([1, 2, 0, 4, 5, 6, 7, 8, 9])
-print(f'>>before test')
-ss3 = ss1 / ss2
-print(f'ss3={ss3}')
-ss4 = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]) * 2
-print(f'ss4={ss4}')
-print(f'{ss4 < ss3}')
+# print(f'>>before test')
+# ss3 = ss1 / ss2
+# print(f'ss3={ss3}')
+# ss4 = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]) * 2
+# print(f'ss4={ss4}')
+# print(f'{ss4 < ss3}')
+# ss5 = np.array([0] * len(ss1))
+# print(ss5)
+# print(f'min={np.min(ss1[1:5])}')
+# print(f'sum={np.sum(ss1[1:5])}')
+# print(f'multiply_sum={np.sum(ss1[1:5] * ss2[1:5])}')
+print((ss1*ss2)[1:5])
+# print(f'multiply_sum={np.sum((ss1*ss2)[1:5])}')
+
+
+# def ndarray_test(a1: np.ndarray):
+#     a1[0] = a1[0] * 2
+#
+#
+# ndarray_test(ss1)
+# print(ss1)

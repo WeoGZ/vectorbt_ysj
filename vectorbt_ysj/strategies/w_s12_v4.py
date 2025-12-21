@@ -9,6 +9,7 @@ from time import perf_counter
 from typing import Callable
 
 import vectorbt as vbt
+from tqdm import tqdm
 
 from vectorbt_ysj.common.future_fee import FUTURE_FEE_ALL
 from vectorbt_ysj.common.future_list import FUTURE_LIST_ALL
@@ -339,6 +340,10 @@ def do_exhaustion(symbol: str, init_cash: float, start_date: datetime, end_date:
         print(f'###{symbol}没有K线数据, start={convert2_datetime_str(start_date)}, end={convert2_datetime_str(end_date)}, '
               f'interval={interval.value}')
         return
+    if (klines_close.index[-1] - klines_close.index[0]).days < 180:
+        print(f'###{symbol}的K线数据跨度不足180个自然日, start={convert2_datetime_str(start_date)}, '
+              f'end={convert2_datetime_str(end_date)}, interval={interval.value}')
+        return
     execute_func: Callable = wrap_func(symbol, init_cash, start_date, end_date, interval, klines_open, klines_high,
                                        klines_low, klines_close, klines_vol)
     strategy_name = os.path.basename(__file__)
@@ -381,13 +386,13 @@ def batch_tasks(period: PeriodType = PeriodType.Quarter):
     init_cashes = INIT_CASH_ALL
     intervals = [Interval.MINUTE60, Interval.MINUTE30]
     backtest_year = 3
-    start_date = datetime(2017, 12, 23, 9, 0, 0)
-    end_date = datetime(2022, 9, 30, 15, 0, 0)
+    start_date = datetime(2020, 12, 23, 9, 0, 0)
+    end_date = datetime(2025, 3, 31, 15, 0, 0)
 
     # 需要穷举的参数范围
     length_list = generate_param_comb(20, 300, 20)
     stpr_list = generate_param_comb(20, 50, 10)
-    n_list = generate_param_comb(20, 90, 10)
+    n_list = generate_param_comb(20, 90, 20)
     all_param_combs = list(product(length_list, stpr_list, n_list))
 
     _end_date_temp = start_date
@@ -396,7 +401,7 @@ def batch_tasks(period: PeriodType = PeriodType.Quarter):
 
     save_remark = f'backtest_year:{backtest_year}'
 
-    for i in range(len(symbols)):
+    for i in tqdm(range(len(symbols)), desc='穷举进度'):
         for j in range(len(intervals)):
             _end_date = _end_date_temp
             while _end_date <= end_date:
