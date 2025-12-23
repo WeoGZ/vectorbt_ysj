@@ -238,6 +238,8 @@ def calculate_max_drawdown(total_portfolio: Portfolio, return_type: int = 0, out
     # valley_val_max_dd = drawdown.get_field_arr('valley_val')[id_max_dd]
     # max_dd = drawdown.max_drawdown()
     dr = total_portfolio.drawdowns.records_readable
+    if dr.empty:
+        return 0
     dr['fall_val'] = dr['Valley Value'] - dr['Peak Value']
     dr['fall_per'] = dr['Valley Value'] / dr['Peak Value'] - 1
     peak_val_max_dd = dr['Peak Value'].iloc[dr['fall_val'].idxmin()]

@@ -1,4 +1,3 @@
-import math
 import os.path
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
@@ -8,143 +7,24 @@ from multiprocessing import get_context
 from time import perf_counter
 from typing import Callable
 
-import vectorbt as vbt
+import plotly.io as pio
 from tqdm import tqdm
 
-from vectorbt_ysj.common.future_fee import FUTURE_FEE_ALL
 from vectorbt_ysj.common.future_list import FUTURE_LIST_ALL
-from vectorbt_ysj.common.future_size import FUTURE_SIZE_ALL
-from vectorbt_ysj.common.future_slippage import FUTURE_SLIPPAGE_ALL
 from vectorbt_ysj.common.init_cash import INIT_CASH_ALL
+from vectorbt_ysj.mytt import MyTT
+from vectorbt_ysj.strategies.common_methods import execute
 from vectorbt_ysj.utils.date_utils import *
+from vectorbt_ysj.utils.db_operation_utils import *
 from vectorbt_ysj.utils.kline_utils import *
 from vectorbt_ysj.utils.param_utils import *
-from vectorbt_ysj.utils.db_operation_utils import *
 from vectorbt_ysj.utils.statistic_utils import *
-from vectorbt_ysj.mytt import MyTT, MyTT_plus
-
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import plotly.io as pio
 
 # 设置渲染器为浏览器
 pio.renderers.default = "browser"
 
 # pd.set_option('Display.max_rows', None)  #展示全部行
 pd.set_option('Display.max_columns', None)  # 展示全部列
-
-
-def execute(symbol: str, init_cash: float, start_date: datetime, end_date: datetime, interval: Interval,
-            klines_open: pd.DataFrame = None, klines_high: pd.DataFrame = None, klines_low: pd.DataFrame = None,
-            klines_close: pd.DataFrame = None, klines_vol: pd.DataFrame = None,
-            length: int = 0, stpr: int = 0) -> tuple | None:
-    """程序入口"""
-    if klines_close is None:
-        # preload_days = (math.ceil(length / KLINE_SIZE_PER_DAY_MAP[interval]) + 60) * (31 / 21)  # 换算成自然日数量
-        preload_days = 3 * 30  # 参数n数值每5大概所需1个月数据计算，在换算成自然日。额外补一个月。
-        klines_open, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date,
-                                                                                      end_date, interval, preload_days)
-    if klines_close is not None and not klines_close.empty:
-        # print(f'>>total_len={len(klines_close)}')
-        long_open_signals, long_close_signals, short_open_signals, short_close_signals = calculate_signals(
-            klines_close[symbol], klines_high[symbol], klines_low[symbol], klines_open[symbol], klines_vol[symbol],
-            interval, length, stpr)
-
-        long_entries = pd.Series(long_open_signals, index=klines_close.index)
-        long_exits = pd.Series(long_close_signals, index=klines_close.index)
-        short_entries = pd.Series(short_open_signals, index=klines_close.index)
-        short_exits = pd.Series(short_close_signals, index=klines_close.index)
-        # 截取开始日期以后的信号、收盘价
-        long_entries = long_entries[long_entries.index >= start_date]
-        long_exits = long_exits[long_exits.index >= start_date]
-        short_entries = short_entries[short_entries.index >= start_date]
-        short_exits = short_exits[short_exits.index >= start_date]
-        klines_close = klines_close[klines_close.index >= start_date]
-
-        vbt.settings['returns']['year_freq'] = '242 days'  # 平均一年242个交易日。vbt默认是365天
-        freq = convert_to_vbt_freq(interval).value
-        total_portfolio = vbt.Portfolio.from_signals(
-            close=klines_close,
-            entries=long_entries,
-            exits=long_exits,
-            short_entries=short_entries,
-            short_exits=short_exits,
-            init_cash=init_cash,
-            # cash_sharing=True,
-            group_by=True,
-            freq=freq,
-            size=FUTURE_SIZE_ALL[symbol] * 1,  # 默认1手
-            fees=FUTURE_FEE_ALL[symbol],
-            slippage=FUTURE_SLIPPAGE_ALL[symbol]
-        )
-
-        # 检测是否爆仓（***暂不使用，因为即使爆仓，计算结果也是大致相同，而且保证金制度下未必爆仓***）
-        # trades_size = total_portfolio.trades.records_readable['Size']
-        # if trades_size[trades_size < FUTURE_SIZE_MAP[symbol] * 1].size > 0:
-        #     print(f'\ntrades.size={trades_size}')
-        #     print(f'\n*****可能爆仓，请调整初始金额*****')
-        #     return None
-
-        # 计算滚动年收益率
-        asset_values = total_portfolio.value()  # 总资产
-        date_1year_ago = end_date.replace(year=end_date.year - 1, hour=15, minute=0, second=0,
-                                          microsecond=0)  # 1年前
-        date_2year_ago = end_date.replace(year=end_date.year - 2, hour=15, minute=0, second=0,
-                                          microsecond=0)
-        date_3year_ago = end_date.replace(year=end_date.year - 3, hour=15, minute=0, second=0,
-                                          microsecond=0)
-        if date_1year_ago < klines_close.index[0]:
-            date_1year_ago = klines_close.index[0]
-        elif date_2year_ago < klines_close.index[0]:
-            date_2year_ago = klines_close.index[0]
-        elif date_3year_ago < klines_close.index[0]:
-            date_3year_ago = klines_close.index[0]
-        year1_con = asset_values.index[0] <= date_1year_ago  # 至少有一年数据
-        year2_con = asset_values.index[0] <= date_2year_ago
-        year3_con = asset_values.index[0] <= date_3year_ago
-        val_year1 = asset_values[asset_values.index <= date_1year_ago].iloc[-1] if year1_con else np.nan
-        val_year2 = asset_values[asset_values.index <= date_2year_ago].iloc[-1] if year2_con else np.nan
-        val_year3 = asset_values[asset_values.index <= date_3year_ago].iloc[-1] if year3_con else np.nan
-        zf_year1 = (asset_values.iloc[-1] - val_year1) / init_cash if year1_con else np.nan  # 单利计算，且要求至少有一年数据
-        zf_year2 = (val_year1 - val_year2) / init_cash if year2_con else np.nan
-        zf_year3 = (val_year2 - val_year3) / init_cash if year3_con else np.nan
-        # print(f'\n>>val_year1: {val_year1:.2f}, val_year2: {val_year2:.2f}, val_year3: {val_year3:.2f}, '
-        #       f'zf_year1: {zf_year1:.4f}, zf_year2: {zf_year2:.4f}, zf_year3: {zf_year3:.4f}')
-
-        # 穷举的参数
-        params_dict = {'len': length, 'stpr': stpr}
-        # 每日盈亏
-        daily_pnl = generate_daily_pnl(asset_values, interval, init_cash)
-        sharpe_ratio = calculate_statistics(daily_pnl, init_cash, 242, 0, False)['sharpe_ratio']
-        # 信号数量
-        signal_count = len(total_portfolio.trades.records_readable)  # 信号对数（一买一卖为一对）
-        winning_count = len(total_portfolio.trades.winning)
-        win_rate = 0 if signal_count == 0 else winning_count / signal_count
-        # 最大回撤
-        max_ddv = calculate_max_drawdown(total_portfolio, return_type=0, output=False)
-
-        # 打印
-        # print(f'\n>>[len={length}, stpr={stpr}, n={n}]\n{total_portfolio.stats()}')
-        print(f'\n>>[symbol={symbol}, interval={interval.value}, start={convert2_datetime_str(start_date)}, '
-              f'end={convert2_datetime_str(end_date)}, init_cash={init_cash}, len={length}, stpr={stpr}]'
-              f'\n总盈利={total_portfolio.total_profit():.2f}, 夏普比率={sharpe_ratio:.2f}, count={signal_count}, '
-              f'winning_count={winning_count}，胜率={win_rate * 100:.2f}%, 最大回撤值={max_ddv:.2f}')
-        # print(f'\n>>总资产={total_portfolio.value()}')
-        # print(f'\n>>asset_value={total_portfolio.asset_value()}')
-        print(f'\n>>trades=\n{total_portfolio.trades.records_readable}')  # 每笔交易的明细
-        # print(f'\n>>trades.pnl=\n{total_portfolio.trades.pnl.values}')  # 每笔交易的盈亏
-        # print(f'\n>>daily_returns=\n{total_portfolio.daily_returns()}')  # 每日涨幅。但包含了周六日，数值为NaN
-        # print(f'\n>>daily_pnl={daily_pnl}, sharpe_ratio={sharpe_ratio:.2f}')  # 每日盈亏，vnpy方式计算的夏普比率
-
-        # 画图
-        # total_portfolio.plot(['cum_returns', 'drawdowns', 'asset_value', 'value', 'underwater', 'gross_exposure',
-        #                       'net_exposure']).show()  # 画图
-        # total_portfolio.plot_trades(symbol)  # 未成功
-        # total_portfolio.plot_trade_pnl(symbol)  # 未成功
-        # total_portfolio.trades.plot()  # 未成功
-
-        return params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count, winning_count
 
 
 def calculate_signals(close_price: pd.Series, high_price: pd.Series, low_price: pd.Series, open_price: pd.Series,
@@ -218,8 +98,10 @@ def handle_close_operation_2(dk_l: np.ndarray, vols: np.ndarray, low_price: np.n
 def wrap_execute(symbol: str, init_cash: float, start_date: datetime, end_date: datetime, interval: Interval,
                  klines_open: pd.DataFrame, klines_high: pd.DataFrame, klines_low: pd.DataFrame,
                  klines_close: pd.DataFrame, klines_vol: pd.DataFrame, params: tuple) -> tuple:
-    return execute(symbol, init_cash, start_date, end_date, interval, klines_open, klines_high, klines_low,
-                   klines_close, klines_vol, params[0], params[1])
+    calculate_func: Callable = partial(calculate_signals, length=params[0], stpr=params[1])
+    params_dict = {'len': params[0], 'stpr': params[1]}
+    return execute(calculate_func, symbol, init_cash, start_date, end_date, interval, klines_open, klines_high,
+                   klines_low, klines_close, klines_vol, params_dict, 180)
 
 
 def wrap_func(symbol: str, init_cash: float, start_date: datetime, end_date: datetime, interval: Interval,
@@ -322,16 +204,24 @@ def combinatorial_test_two_types():
     end_date = datetime(2025, 4, 23, 15, 0, 0)
 
     symbol = 'RBL9'
-    init_cash = 60000
+    init_cash = INIT_CASH_ALL[symbol]
+    length = 250
+    stpr = 20
     interval = Interval.MINUTE60
+    calculate_func: Callable = partial(calculate_signals, length=length, stpr=stpr)
+    params_dict = {'len': length, 'stpr': stpr}
     params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count, win_count = (
-        execute(symbol, init_cash, start_date, end_date, interval, length=250, stpr=20))
+        execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=params_dict))
 
     symbol2 = 'SAL9'
-    init_cash2 = 60000
+    init_cash2 = INIT_CASH_ALL[symbol2]
+    length2 = 50
+    stpr2 = 15
     interval2 = Interval.MINUTE60
+    calculate_func2: Callable = partial(calculate_signals, length=length2, stpr=stpr2)
+    params_dict2 = {'len': length2, 'stpr': stpr2}
     params_dict2, sharpe_ratio2, zf_year1_2, zf_year2_2, zf_year3_2, daily_pnl2, signal_count2, win_count2 = (
-        execute(symbol2, init_cash2, start_date, end_date, interval2, length=50, stpr=15))
+        execute(calculate_func2, symbol2, init_cash2, start_date, end_date, interval2, params_dict=params_dict2))
 
     # 组合测试
     total_daily_pnl = daily_pnl.add(daily_pnl2)
@@ -349,8 +239,12 @@ def single_test():
     interval = Interval.MINUTE60
     start_date = datetime(2024, 4, 10, 9, 0, 0)
     end_date = datetime(2025, 5, 31, 15, 0, 0)
+
+    calculate_func: Callable = partial(calculate_signals, length=length, stpr=stpr)
+    params_dict = {'len': length, 'stpr': stpr}
     params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, count, win_count = (
-        execute(symbol, init_cash, start_date, end_date, interval, length=length, stpr=stpr))
+        execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=params_dict,
+                print_trade_detail=True))
 
     # result = [(params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3)]
     # save_table_optimization(result, os.path.basename(__file__), symbol, interval.value, start_date, end_date,

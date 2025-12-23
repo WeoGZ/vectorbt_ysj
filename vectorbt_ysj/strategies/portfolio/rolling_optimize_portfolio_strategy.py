@@ -6,7 +6,9 @@ from urllib import parse
 import pandas as pd
 from sqlalchemy import create_engine
 
-from vectorbt_ysj.strategies.w_s12_v4 import execute
+# from vectorbt_ysj.strategies.w_s12_v4 import execute
+import vectorbt_ysj.strategies.w_s12_v4 as strategy_s12_v4
+import vectorbt_ysj.strategies.w_s12 as strategy_s12
 from vectorbt_ysj.utils.date_utils import *
 from vectorbt_ysj.utils.param_utils import *
 from vectorbt_ysj.utils.statistic_utils import calculate_statistics
@@ -44,7 +46,8 @@ def execute1(strategy_name: str, futures: list, start_date: datetime, end_date: 
             _start_date = start_date.replace(hour=9) if _start_date is None else (
                     train_end_date.replace(hour=9) + timedelta(days=1))
             _end_date = end_date if train_end_date == verify_end_date else get_quarter_end_date(_start_date)
-            _daily_pnl, _total_init_cash, _best_comb_infos = combinatorial_test(db_records, _start_date, _end_date)
+            _daily_pnl, _total_init_cash, _best_comb_infos = combinatorial_test(strategy_name, db_records, _start_date,
+                                                                                _end_date)
 
             all_daily_pnl = pd.concat([all_daily_pnl, _daily_pnl])
             total_init_cash = max(total_init_cash, _total_init_cash)
@@ -62,7 +65,8 @@ def execute1(strategy_name: str, futures: list, start_date: datetime, end_date: 
     print_comb_infos(all_comb_infos)
 
 
-def combinatorial_test(db_records: pd.DataFrame, start_date: datetime, end_date: datetime) -> tuple | None:
+def combinatorial_test(strategy_name: str, db_records: pd.DataFrame, start_date: datetime,
+                       end_date: datetime) -> tuple | None:
     """组合测试。返回汇总的每日盈亏"""
     if db_records is not None and len(db_records) > 0:
         total_daily_pnl = None
@@ -76,9 +80,17 @@ def combinatorial_test(db_records: pd.DataFrame, start_date: datetime, end_date:
             init_cash = db_records.iloc[i]['init_cash']
             interval = find_interval(db_records.iloc[i]['period'])
             params_dict = convert2dict(db_records.iloc[i]['params'])
-            _, _, _, _, _, daily_pnl, _ = execute(symbol, init_cash, start_date, end_date, interval,
-                                                  length=params_dict['len'], stpr=params_dict['stpr'],
-                                                  n=params_dict['n'])
+            daily_pnl = pd.DataFrame()
+            if strategy_name == 'w_s12_v4.py':
+                _, _, _, _, _, daily_pnl, _, _ = strategy_s12_v4.execute(symbol, init_cash, start_date, end_date,
+                                                                         interval,
+                                                                         length=params_dict['len'],
+                                                                         stpr=params_dict['stpr'],
+                                                                         n=params_dict['n'])
+            elif strategy_name == 'w_s12.py':
+                _, _, _, _, _, daily_pnl, _, _ = strategy_s12.execute(symbol, init_cash, start_date, end_date, interval,
+                                                                      length=params_dict['len'],
+                                                                      stpr=params_dict['stpr'])
             if total_daily_pnl is None:
                 total_daily_pnl = daily_pnl
             else:
@@ -100,10 +112,11 @@ def query_db_records(strategy_name: str, futures: list, train_end_date: datetime
                  "FROM optimization_data "
                  "WHERE strategy='%s' AND vt_symbol in ('%s') AND end_date='%s' AND target_value>0 GROUP BY vt_symbol) AS t2 "
                  "ON t1.target_value=t2.sp "
-                 "WHERE t2.sp IS NOT NULL "
+                 "WHERE t2.sp IS NOT NULL AND t1.strategy='%s' AND t1.vt_symbol in ('%s') AND t1.end_date='%s' "
                  "ORDER BY t1.vt_symbol,t1.params;")
-    db_records = pd.read_sql_query(query_sql % (strategy_name, symbols_str, convert2_datetime_str(train_end_date)),
-                                   db_engine)
+    end_date_str = convert2_datetime_str(train_end_date)
+    db_records = pd.read_sql_query(query_sql % (strategy_name, symbols_str, end_date_str, strategy_name, symbols_str,
+                                                end_date_str), db_engine)
 
     return db_records
 
@@ -121,10 +134,10 @@ def print_comb_infos(comb_infos: dict) -> None:
 if __name__ == '__main__':
     t0 = datetime.now()
 
-    start_date = datetime(2023, 1, 1, 9, 0, 0)
+    start_date = datetime(2025, 1, 1, 9, 0, 0)
     end_date = datetime(2025, 5, 14, 15, 0, 0)
     # end_date = datetime(2025, 5, 14, 15, 0, 0)
-    execute1('w_s12_v4.py', ['RBL9', 'SAL9', 'AOL9'], start_date, end_date)
+    execute1('w_s12.py', ['RBL9', 'SAL9', 'AOL9'], start_date, end_date)
 
     t1 = datetime.now()
     print(f'\n>>>>>>总耗时{t1 - t0}s, now={t1}')

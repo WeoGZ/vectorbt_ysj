@@ -127,9 +127,14 @@ from vectorbt_ysj.common.future_list import *
 #         print(symbols[i], intervals[j])
 
 
-# s = pd.Series([2, 1, 3, 4, 5])
+# s = pd.Series([2, 1, 3, 4, 5, 4])
+# s = pd.Series([False, False, True, False, True, False])
 # rs = s.rolling(3, 1).mean()
 # print(rs)
+# print(s[s == 4].index[0])
+# print(s[s == True].index[0])
+# s.iloc[0] = True
+# print(s)
 
 
 # param_str = "{'len': 200, 'stpr': 40, 'n': 30}"
@@ -154,12 +159,13 @@ from vectorbt_ysj.common.future_list import *
 # print(FUTURE_LIST, '\n', f'size={len(FUTURE_LIST)}')
 
 
-# dict1 = {'a': 10, 'b': 8}
+dict1 = {'a': 10, 'b': 8}
 # dict2 = {'d': 6, 'c': 4}
 # dict3 = {'e': 16, 'f': 14}
 # dict1.update(dict2)
 # dict1.update(dict3)
-# print(dict1)
+print(f'{dict1}')
+print(f'{str(dict1)}')
 
 
 # a = 10
@@ -169,8 +175,8 @@ from vectorbt_ysj.common.future_list import *
 # print(c)
 # print(f'***分母为0')
 
-ss1 = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
-ss2 = np.array([1, 2, 0, 4, 5, 6, 7, 8, 9])
+# ss1 = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+# ss2 = np.array([1, 2, 0, 4, 5, 6, 7, 8, 9])
 # print(f'>>before test')
 # ss3 = ss1 / ss2
 # print(f'ss3={ss3}')
@@ -182,7 +188,7 @@ ss2 = np.array([1, 2, 0, 4, 5, 6, 7, 8, 9])
 # print(f'min={np.min(ss1[1:5])}')
 # print(f'sum={np.sum(ss1[1:5])}')
 # print(f'multiply_sum={np.sum(ss1[1:5] * ss2[1:5])}')
-print((ss1*ss2)[1:5])
+# print((ss1*ss2)[1:5])
 # print(f'multiply_sum={np.sum((ss1*ss2)[1:5])}')
 
 
