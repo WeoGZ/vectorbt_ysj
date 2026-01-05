@@ -12,10 +12,10 @@ from vectorbt_ysj.utils.param_utils import convert_to_vbt_freq
 from vectorbt_ysj.utils.statistic_utils import *
 
 
-def execute(calculate_func: Callable, symbol: str, init_cash: float, start_date: datetime, end_date: datetime,
-            interval: Interval, klines_open: pd.DataFrame = None, klines_high: pd.DataFrame = None,
-            klines_low: pd.DataFrame = None, klines_close: pd.DataFrame = None, klines_vol: pd.DataFrame = None,
-            params_dict: dict = None, preload_days: int = 90, print_trade_detail: bool = False) -> tuple | None:
+def common_execute(calculate_func: Callable, symbol: str, init_cash: float, start_date: datetime, end_date: datetime,
+                   interval: Interval, klines_open: pd.DataFrame = None, klines_high: pd.DataFrame = None,
+                   klines_low: pd.DataFrame = None, klines_close: pd.DataFrame = None, klines_vol: pd.DataFrame = None,
+                   params_dict: dict = None, preload_days: int = 90, print_trade_detail: bool = False) -> tuple | None:
     """历史回测程序。calculate_func是各个策略计算交易信号的封装函数。出了交易信号之后的绩效评测流程是统一的"""
     if klines_close is None:
         # preload_days = (math.ceil(length / KLINE_SIZE_PER_DAY_MAP[interval]) + 60) * (31 / 21)  # 换算成自然日数量

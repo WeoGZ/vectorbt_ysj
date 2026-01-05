@@ -1,14 +1,16 @@
 """滚动优化组合策略"""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
+from functools import partial
+from typing import Callable
 from urllib import parse
 
 import pandas as pd
 from sqlalchemy import create_engine
 
-# from vectorbt_ysj.strategies.w_s12_v4 import execute
-import vectorbt_ysj.strategies.w_s12_v4 as strategy_s12_v4
 import vectorbt_ysj.strategies.w_s12 as strategy_s12
+import vectorbt_ysj.strategies.w_s12_v4 as strategy_s12_v4
+from vectorbt_ysj.strategies.common_methods import common_execute
 from vectorbt_ysj.utils.date_utils import *
 from vectorbt_ysj.utils.param_utils import *
 from vectorbt_ysj.utils.statistic_utils import calculate_statistics
@@ -82,15 +84,17 @@ def combinatorial_test(strategy_name: str, db_records: pd.DataFrame, start_date:
             params_dict = convert2dict(db_records.iloc[i]['params'])
             daily_pnl = pd.DataFrame()
             if strategy_name == 'w_s12_v4.py':
-                _, _, _, _, _, daily_pnl, _, _ = strategy_s12_v4.execute(symbol, init_cash, start_date, end_date,
-                                                                         interval,
-                                                                         length=params_dict['len'],
-                                                                         stpr=params_dict['stpr'],
-                                                                         n=params_dict['n'])
+                calculate_func: Callable = partial(strategy_s12_v4.calculate_signals, length=params_dict['len'],
+                                                   stpr=params_dict['stpr'], n=params_dict['n'])
+                par_dict = {'len': params_dict['len'], 'stpr': params_dict['stpr'], 'n': params_dict['n']}
+                _, _, _, _, _, daily_pnl, _, _ = common_execute(calculate_func, symbol, init_cash, start_date,
+                                                                end_date, interval, params_dict=par_dict)
             elif strategy_name == 'w_s12.py':
-                _, _, _, _, _, daily_pnl, _, _ = strategy_s12.execute(symbol, init_cash, start_date, end_date, interval,
-                                                                      length=params_dict['len'],
-                                                                      stpr=params_dict['stpr'])
+                calculate_func: Callable = partial(strategy_s12.calculate_signals, length=params_dict['len'],
+                                                   stpr=params_dict['stpr'])
+                par_dict = {'len': params_dict['len'], 'stpr': params_dict['stpr']}
+                _, _, _, _, _, daily_pnl, _, _ = common_execute(calculate_func, symbol, init_cash, start_date,
+                                                                end_date, interval, params_dict=par_dict)
             if total_daily_pnl is None:
                 total_daily_pnl = daily_pnl
             else:
@@ -134,9 +138,9 @@ def print_comb_infos(comb_infos: dict) -> None:
 if __name__ == '__main__':
     t0 = datetime.now()
 
-    start_date = datetime(2025, 1, 1, 9, 0, 0)
+    start_date = datetime(2024, 1, 1, 9, 0, 0)
     end_date = datetime(2025, 5, 14, 15, 0, 0)
-    # end_date = datetime(2025, 5, 14, 15, 0, 0)
+
     execute1('w_s12.py', ['RBL9', 'SAL9', 'AOL9'], start_date, end_date)
 
     t1 = datetime.now()

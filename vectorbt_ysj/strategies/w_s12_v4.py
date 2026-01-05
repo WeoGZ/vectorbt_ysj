@@ -14,7 +14,7 @@ from tqdm import tqdm
 from vectorbt_ysj.common.future_list import FUTURE_LIST_ALL
 from vectorbt_ysj.common.init_cash import INIT_CASH_ALL
 from vectorbt_ysj.mytt import MyTT, MyTT_plus
-from vectorbt_ysj.strategies.common_methods import execute
+from vectorbt_ysj.strategies.common_methods import common_execute
 from vectorbt_ysj.utils.date_utils import *
 from vectorbt_ysj.utils.db_operation_utils import *
 from vectorbt_ysj.utils.kline_utils import *
@@ -200,8 +200,8 @@ def wrap_execute(symbol: str, init_cash: float, start_date: datetime, end_date: 
     calculate_func: Callable = partial(calculate_signals, length=params[0], stpr=params[1], n=params[2])
     params_dict = {'len': params[0], 'stpr': params[1], 'n': params[2]}
     preload_days = (params[2] / 5 + 1) * 30
-    return execute(calculate_func, symbol, init_cash, start_date, end_date, interval, klines_open, klines_high,
-                   klines_low, klines_close, klines_vol, params_dict, preload_days)
+    return common_execute(calculate_func, symbol, init_cash, start_date, end_date, interval, klines_open, klines_high,
+                          klines_low, klines_close, klines_vol, params_dict, preload_days)
 
 
 def wrap_func(symbol: str, init_cash: float, start_date: datetime, end_date: datetime, interval: Interval,
@@ -312,7 +312,7 @@ def combinatorial_test_two_types():
     calculate_func: Callable = partial(calculate_signals, length=length, stpr=stpr, n=n)
     params_dict = {'len': length, 'stpr': stpr, 'n': n}
     params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count, win_count = (
-        execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=params_dict))
+        common_execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=params_dict))
 
     symbol2 = 'SAL9'
     init_cash2 = INIT_CASH_ALL[symbol2]
@@ -323,7 +323,7 @@ def combinatorial_test_two_types():
     calculate_func2: Callable = partial(calculate_signals, length=length2, stpr=stpr2, n=n2)
     params_dict2 = {'len': length2, 'stpr': stpr2, 'n': n2}
     params_dict2, sharpe_ratio2, zf_year1_2, zf_year2_2, zf_year3_2, daily_pnl2, signal_count2, win_count2 = (
-        execute(calculate_func2, symbol2, init_cash2, start_date, end_date, interval2, params_dict=params_dict2))
+        common_execute(calculate_func2, symbol2, init_cash2, start_date, end_date, interval2, params_dict=params_dict2))
 
     # 组合测试
     total_daily_pnl = daily_pnl.add(daily_pnl2)
@@ -346,7 +346,7 @@ def single_test():
     calculate_func: Callable = partial(calculate_signals, length=length, stpr=stpr, n=n)
     params_dict = {'len': length, 'stpr': stpr, 'n': n}
     params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, count, win_count = (
-        execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=params_dict))
+        common_execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=params_dict))
 
     # result = [(params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3)]
     # save_table_optimization(result, os.path.basename(__file__), symbol, interval.value, start_date, end_date,
@@ -361,10 +361,10 @@ if __name__ == "__main__":
     # single_test()
 
     # 组合测试
-    combinatorial_test_two_types()
+    # combinatorial_test_two_types()
 
     # 多进程并行
-    # batch_tasks()
+    batch_tasks()
 
     t1 = datetime.now()
     print(f'\n>>>>>>总耗时{t1 - t0}s, now={t1}')
