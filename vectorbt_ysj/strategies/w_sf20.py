@@ -177,8 +177,7 @@ def batch_tasks(period: PeriodType = PeriodType.Quarter):
     # 需要穷举的参数范围
     length_list = generate_param_comb(20, 300, 20)
     stpr_list = generate_param_comb(20, 50, 10)
-    n_list = generate_param_comb(20, 90, 10)
-    all_param_combs = list(product(length_list, stpr_list, n_list))
+    all_param_combs = list(product(length_list, stpr_list))
 
     _end_date_temp = start_date
     if period == PeriodType.Quarter:
@@ -256,13 +255,13 @@ if __name__ == "__main__":
     t0 = datetime.now()
 
     # 单品种测试
-    single_test()
+    # single_test()
 
     # 组合测试
     # combinatorial_test_two_types()
 
     # 多进程并行
-    # batch_tasks()
+    batch_tasks()
 
     t1 = datetime.now()
     print(f'\n>>>>>>总耗时{t1 - t0}s, now={t1}')

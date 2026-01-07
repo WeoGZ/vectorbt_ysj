@@ -14,6 +14,7 @@ from vectorbt_ysj.strategies.common_methods import common_execute
 from vectorbt_ysj.utils.date_utils import *
 from vectorbt_ysj.utils.param_utils import *
 from vectorbt_ysj.utils.statistic_utils import calculate_statistics
+from vectorbt_ysj.utils.db_operation_utils import *
 
 
 def execute1(strategy_name: str, futures: list, start_date: datetime, end_date: datetime):
@@ -43,7 +44,7 @@ def execute1(strategy_name: str, futures: list, start_date: datetime, end_date: 
 
     while train_end_date <= verify_end_date:
         print_str = f'>>train_end_date={train_end_date}'
-        db_records = query_db_records(strategy_name, futures, train_end_date)
+        db_records = query_db_records1(strategy_name, futures, train_end_date)
         if db_records is not None and len(db_records) > 0:
             _start_date = start_date.replace(hour=9) if _start_date is None else (
                     train_end_date.replace(hour=9) + timedelta(days=1))
@@ -105,9 +106,9 @@ def combinatorial_test(strategy_name: str, db_records: pd.DataFrame, start_date:
         return total_daily_pnl, total_init_cash, best_comb_infos
 
 
-def query_db_records(strategy_name: str, futures: list, train_end_date: datetime) -> pd.DataFrame | None:
-    """查询记录"""
-    db_engine = create_engine('mysql+pymysql://root:%s@localhost:3306/vnpy' % parse.quote_plus('admin'))
+def query_db_records1(strategy_name: str, futures: list, train_end_date: datetime) -> pd.DataFrame | None:
+    """查询指定策略、指定训练时间节点下，每个标的表现最好的一组参数"""
+    db_engine = get_db_engine()
     symbols_str = "','".join(futures)
     query_sql = ("SELECT t1.vt_symbol,t1.period,t1.start_date,t1.end_date,t1.target,t1.target_value,t1.params,"
                  "t1.zf_year1,t1.zf_year2,t1.zf_year3,t1.count,t1.init_cash "

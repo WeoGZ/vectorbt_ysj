@@ -6,13 +6,14 @@ from sqlalchemy import create_engine
 
 from vectorbt_ysj.utils.date_utils import convert2_datetime_str
 
+g_db_engine = None
+
 
 def save_table_optimization(results: list, strategy_class: str, vt_symbol, interval: str, init_cash: float,
                             start_date: datetime, end_date: datetime, target: str, remark: str,
                             generate_datetime: datetime):
     """写入数据库。写到表optimization_data"""
-    # db_engine = create_engine('mysql+pymysql://ucnotkline:%s@192.168.2.205:3306/vnpy' % parse.quote_plus('ucnotkline@205'))
-    db_engine = create_engine('mysql+pymysql://root:%s@localhost:3306/vnpy' % parse.quote_plus('admin'))
+    db_engine = get_db_engine()
 
     table_columns = ['strategy', 'vt_symbol', 'period', 'start_date', 'end_date', 'target', 'target_value', 'params',
                      'remark', 'generate_datetime', 'zf_year1', 'zf_year2', 'zf_year3', 'count', 'win_count',
@@ -44,8 +45,7 @@ def save_table_optimization(results: list, strategy_class: str, vt_symbol, inter
 def query_optimization_exist(strategy_class: str, vt_symbol: str, interval: str, start_date: datetime,
                              end_date: datetime, remark: str) -> bool:
     """查询是否存在记录"""
-    # db_engine = create_engine('mysql+pymysql://ucnotkline:%s@192.168.2.205:3306/vnpy' % parse.quote_plus('ucnotkline@205'))
-    db_engine = create_engine('mysql+pymysql://root:%s@localhost:3306/vnpy' % parse.quote_plus('admin'))
+    db_engine = get_db_engine()
     query_sql = ("SELECT COUNT(1) AS cnt FROM `optimization_data` WHERE strategy='%s' AND vt_symbol='%s' AND "
                  "period='%s' AND start_date='%s' AND end_date='%s' AND remark='%s';")
     db_records = pd.read_sql_query(
@@ -53,3 +53,12 @@ def query_optimization_exist(strategy_class: str, vt_symbol: str, interval: str,
                      convert2_datetime_str(end_date), remark), db_engine)
     if db_records is not None and len(db_records) > 0 and db_records.iloc[0]['cnt'] > 0:
         return True
+
+
+def get_db_engine():
+    global g_db_engine
+    if g_db_engine is None:
+        # g_db_engine = create_engine('mysql+pymysql://ucnotkline:%s@192.168.2.205:3306/vnpy' % parse.quote_plus('ucnotkline@205'))
+        g_db_engine = create_engine('mysql+pymysql://root:%s@localhost:3306/vnpy' % parse.quote_plus('admin'))
+
+    return g_db_engine

@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from urllib import parse
 
 from vectorbt_ysj.common.constant import *
+from vectorbt_ysj.utils.db_operation_utils import *
 
 
 def fetch_klines(symbols: list[str], start_date: datetime, end_date: datetime, interval: Interval,
@@ -20,7 +21,7 @@ def fetch_klines(symbols: list[str], start_date: datetime, end_date: datetime, i
     all_klines_low = pd.DataFrame()
     all_klines_close = pd.DataFrame()
     all_klines_vol = pd.DataFrame()
-    klineEngine = create_engine('mysql+pymysql://root:%s@localhost:3306/vnpy' % parse.quote_plus('admin'))
+    klineEngine = get_db_engine()
     if preload_days > 0:
         start_date = start_date - timedelta(days=preload_days)
 
