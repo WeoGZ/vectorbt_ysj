@@ -266,7 +266,7 @@ def batch_tasks(period: PeriodType = PeriodType.Quarter):
     # 一般参数
     # symbols = ['AOL9']
     # symbols = ['RBL9', 'SAL9', 'AOL9']
-    symbols = FUTURE_LIST_ALL
+    symbols = [sym for sym in FUTURE_LIST_ALL if sym not in ['AUL9', 'AGL9', 'SCL9']]
     # init_cashes = [90000, 90000, 120000]  # vbt不支持保证金制度计算，因此需要按照1手的实际价值来算（大致是文华保证金制度下所需资金的6倍）
     init_cashes = INIT_CASH_ALL
     intervals = [Interval.MINUTE15, Interval.MINUTE5]  # Interval.MINUTE60, Interval.MINUTE30
@@ -359,13 +359,13 @@ if __name__ == "__main__":
     t0 = datetime.now()
 
     # 单品种测试
-    single_test()
+    # single_test()
 
     # 组合测试
     # combinatorial_test_two_types()
 
     # 多进程并行
-    # batch_tasks()
+    batch_tasks()
 
     t1 = datetime.now()
     print(f'\n>>>>>>总耗时{t1 - t0}s, now={t1}')
