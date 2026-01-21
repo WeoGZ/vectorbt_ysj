@@ -10,7 +10,7 @@ from vectorbt_ysj.common.constant import Interval, LAST_BAR_START_TIME_MAP
 
 
 def calculate_statistics(
-        df: DataFrame,
+        dff: DataFrame,
         init_cash: float,
         annual_days: int,
         risk_free: float,
@@ -20,7 +20,7 @@ def calculate_statistics(
     print("\n开始计算策略统计指标")
 
     # Check DataFrame input exterior
-    if df is None:
+    if dff is None:
         print("\n***回测结果为空，无法计算绩效统计指标")
         return {}
 
@@ -55,7 +55,8 @@ def calculate_statistics(
     # Check if balance is always positive
     positive_balance: bool = False
 
-    if df is not None:
+    if dff is not None:
+        df = pd.DataFrame(dff)
         # Calculate balance related time series data
         df["balance"] = df["net_pnl"].cumsum() + init_cash
 

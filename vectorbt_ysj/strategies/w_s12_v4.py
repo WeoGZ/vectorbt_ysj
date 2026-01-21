@@ -24,7 +24,7 @@ from vectorbt_ysj.utils.statistic_utils import *
 # 设置渲染器为浏览器
 pio.renderers.default = "browser"
 
-# pd.set_option('Display.max_rows', None)  #展示全部行
+pd.set_option('Display.max_rows', None)  #展示全部行
 pd.set_option('Display.max_columns', None)  # 展示全部列
 
 
@@ -269,7 +269,7 @@ def batch_tasks(period: PeriodType = PeriodType.Quarter):
     symbols = FUTURE_LIST_ALL
     # init_cashes = [90000, 90000, 120000]  # vbt不支持保证金制度计算，因此需要按照1手的实际价值来算（大致是文华保证金制度下所需资金的6倍）
     init_cashes = INIT_CASH_ALL
-    intervals = [Interval.MINUTE60, Interval.MINUTE30]
+    intervals = [Interval.MINUTE15, Interval.MINUTE5]  # Interval.MINUTE60, Interval.MINUTE30
     backtest_year = 3
     start_date = datetime(2020, 12, 23, 9, 0, 0)
     end_date = datetime(2025, 3, 31, 15, 0, 0)
@@ -334,19 +334,20 @@ def combinatorial_test_two_types():
 
 def single_test():
     """单品种测试"""
-    symbol = 'AOL9'  # RBL9、SAL9、AOL9
+    symbol = 'JML9'  # RBL9、SAL9、AOL9
     init_cash = INIT_CASH_ALL[symbol]  # 90000、90000、120000
-    length = 140  # RBL9:(250,20,70)、SAL9:(50,15,20)、AOL9:(130,40,20)
-    stpr = 40
+    length = 100  # RBL9:(250,20,70)、SAL9:(50,15,20)、AOL9:(130,40,20)
+    stpr = 30
     n = 20
     interval = Interval.MINUTE30
-    start_date = datetime(2022, 4, 1, 9, 0, 0)
-    end_date = datetime(2025, 3, 31, 15, 0, 0)
+    start_date = datetime(2022, 1, 1, 9, 0, 0)
+    end_date = datetime(2024, 12, 31, 15, 0, 0)
 
     calculate_func: Callable = partial(calculate_signals, length=length, stpr=stpr, n=n)
     params_dict = {'len': length, 'stpr': stpr, 'n': n}
     params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, count, win_count = (
-        common_execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=params_dict))
+        common_execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=params_dict,
+                       print_trade_detail=True, preload_days=570))
 
     # result = [(params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3)]
     # save_table_optimization(result, os.path.basename(__file__), symbol, interval.value, start_date, end_date,
@@ -358,13 +359,13 @@ if __name__ == "__main__":
     t0 = datetime.now()
 
     # 单品种测试
-    # single_test()
+    single_test()
 
     # 组合测试
     # combinatorial_test_two_types()
 
     # 多进程并行
-    batch_tasks()
+    # batch_tasks()
 
     t1 = datetime.now()
     print(f'\n>>>>>>总耗时{t1 - t0}s, now={t1}')

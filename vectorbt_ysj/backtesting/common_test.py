@@ -143,15 +143,17 @@ from vectorbt_ysj.common.future_list import *
 # print(param_dict)
 
 
-# df1 = pd.DataFrame({'A': [1, 2, 3]}, index=['a', 'b', 'c'])
-# # df1 = pd.DataFrame({'A': [1, 2]}, index=['a', 'b'])
-# df2 = pd.DataFrame({'A': [8, 9]}, index=['b', 'c'])
-# # df2 = pd.DataFrame({'A': [7, 8, 9]}, index=['a', 'b', 'c'])
+# # df1 = pd.DataFrame().add(pd.DataFrame({'A': [1, 2, 3]}, index=['a', 'b', 'c']), fill_value=0)
+# # df1 = pd.DataFrame({'A': [1, 2, 3]}, index=['a', 'b', 'c'])
+# df1 = pd.DataFrame({'A': [1, 2]}, index=['b', 'c'])
+# # print(df1)
+# # df2 = pd.DataFrame({'A': [8, 9]}, index=['b', 'c'])
+# df2 = pd.DataFrame({'A': [7, 8, 9]}, index=['a', 'b', 'c'])
 # # df3 = df1 + df2
 # df3 = df1.add(df2, fill_value=0)
 # # df4 = df1._append(df2, ignore_index=False).reset_index().drop_duplicates(subset='index', keep='last').set_index('index')
 # df5 = pd.concat([df1, df2])
-# print(df3)
+# print('\n', df3)
 # # print('\n', df4)
 # print('\n', df5)
 
@@ -159,13 +161,13 @@ from vectorbt_ysj.common.future_list import *
 # print(FUTURE_LIST, '\n', f'size={len(FUTURE_LIST)}')
 
 
-dict1 = {'a': 10, 'b': 8}
+# dict1 = {'a': 10, 'b': 8}
 # dict2 = {'d': 6, 'c': 4}
 # dict3 = {'e': 16, 'f': 14}
 # dict1.update(dict2)
 # dict1.update(dict3)
-print(f'{dict1}')
-print(f'{str(dict1)}')
+# print(f'{dict1}')
+# print(f'{str(dict1)}')
 
 
 # a = 10
@@ -198,3 +200,36 @@ print(f'{str(dict1)}')
 #
 # ndarray_test(ss1)
 # print(ss1)
+
+
+# 常见用途
+# 需要同时访问索引和值的场景（如修改元素、记录位置）。
+# 生成带索引的数据结构（如字典或元组列表）。
+# 调试时跟踪元素位置。
+# 通过 enumerate()，可以避免手动维护索引变量，使代码更简洁高效。
+# fruits = ["apple", "banana", "cherry"]
+# # for index, value in enumerate(fruits, start=11):
+# #     print(f"索引 {index} 对应的水果是 {value}")
+# indexed_fruits = list(enumerate(fruits, start=10))
+# print(f'fruits.dtype={type(fruits)}')
+# print(fruits)
+# print(f'indexed_fruits.dtype={type(indexed_fruits)}')
+# print(indexed_fruits)
+
+
+# fl = [sym for sym in FUTURE_LIST_ALL if sym not in (FUTURE_LIST_PRECIOUS_METALS + FUTURE_LIST_NONFERROUS_METALS)]
+# print(fl)
+
+
+pd1 = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6], 'C': [7, 8, 9]})
+pd1['A'] = pd1['B'].cumsum()
+print(pd1)
+# sum1 = pd1.sum().iloc[1]
+# print(f'sum1={sum1}, type={type(sum1)}')
+
+
+# l1 = [1]
+# l2 = [2, 3, 4]
+# l1.append(l2)
+# # l1.extend(l2)
+# print(l1, f'\ntype={type(l1)}')
