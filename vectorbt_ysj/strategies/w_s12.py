@@ -131,8 +131,8 @@ def wrap_func(symbol: str, init_cash: float, start_date: datetime, end_date: dat
 
 
 def do_exhaustion(symbol: str, init_cash: float, start_date: datetime, end_date: datetime, interval: Interval,
-                  all_param_combs: list, save_remark: str, max_workers: int | None = None):
-    """穷举单个品种"""
+                  all_param_combs: list, save_remark: str, max_workers: int | None = None, save_num: int = 0):
+    """穷举单个品种。参数：save_num——保存的数量，若为0表示保存全部"""
     # preload_days = (300 + 60) * (31 / 21)  # 换算成自然日数量
     preload_days = 180  # 参数n数值每5大概所需1个月数据计算，在换算成自然日。额外补一个月。参数n的最大值为90
     klines_open, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date, end_date,
@@ -174,7 +174,8 @@ def do_exhaustion(symbol: str, init_cash: float, start_date: datetime, end_date:
     print(f"\n>>>>穷举算法优化完成，耗时{cost}秒")
 
     if results is not None and len(results) > 0:
-        save_table_optimization(results[:20], strategy_name, symbol, interval.value, init_cash,
+        results_to_save = results if save_num == 0 else results[:save_num]
+        save_table_optimization(results_to_save, strategy_name, symbol, interval.value, init_cash,
                                 start_date, end_date, 'sharpe_ratio', save_remark, datetime.now())  # 保存前20名
 
 
@@ -208,6 +209,43 @@ def batch_tasks(period: PeriodType = PeriodType.Quarter):
             while _end_date <= end_date:
                 _startDate = _end_date.replace(year=_end_date.year - backtest_year, hour=9, minute=0, second=0,
                                                microsecond=0) + timedelta(days=1)
+                do_exhaustion(symbols[i], init_cashes[symbols[i]], _startDate, _end_date, intervals[j], all_param_combs,
+                              save_remark, save_num=20)
+
+                _end_date = get_quarter_end_date(_end_date + timedelta(days=1))
+
+
+def batch_tasks2(period: PeriodType = PeriodType.Quarter):
+    """批量任务"""
+    # 一般参数
+    # symbols = ['AOL9']
+    # symbols = ['RBL9', 'SAL9', 'AOL9']
+    symbols = [sym for sym in FUTURE_LIST_ALL if sym not in ['AUL9', 'AGL9', 'SCL9']]
+    # init_cashes = [90000, 90000, 120000]  # vbt不支持保证金制度计算，因此需要按照1手的实际价值来算（大致是文华保证金制度下所需资金的6倍）
+    init_cashes = INIT_CASH_ALL
+    intervals = [Interval.MINUTE60]
+    # backtest_year = 3
+    start_date = datetime(2024, 9, 30, 15, 0, 0)
+    end_date = datetime(2026, 6, 30, 15, 0, 0)
+
+    # 需要穷举的参数范围
+    length_list = generate_param_comb(20, 300, 10)
+    stpr_list = generate_param_comb(15, 50, 5)
+    all_param_combs = list(product(length_list, stpr_list))
+
+    _end_date_temp = start_date
+    if period == PeriodType.Quarter:
+        _end_date_temp = get_quarter_end_date(start_date)
+
+    save_remark = f'fixed_startDate=2020.1.1'
+    _startDate = datetime(2020, 1, 1, 9, 0, 0)
+
+    for i in tqdm(range(len(symbols)), desc='穷举进度'):
+        for j in range(len(intervals)):
+            _end_date = _end_date_temp
+            while _end_date <= end_date:
+                # _startDate = _end_date.replace(year=_end_date.year - backtest_year, hour=9, minute=0, second=0,
+                #                                microsecond=0) + timedelta(days=1)
                 do_exhaustion(symbols[i], init_cashes[symbols[i]], _startDate, _end_date, intervals[j], all_param_combs,
                               save_remark)
 
@@ -278,7 +316,8 @@ if __name__ == "__main__":
     # combinatorial_test_two_types()
 
     # 多进程并行
-    batch_tasks()
+    # batch_tasks()
+    batch_tasks2()
 
     t1 = datetime.now()
     print(f'\n>>>>>>总耗时{t1 - t0}s, now={t1}')
