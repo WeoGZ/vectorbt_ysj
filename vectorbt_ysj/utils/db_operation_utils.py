@@ -15,9 +15,9 @@ def save_table_optimization(results: list, strategy_class: str, vt_symbol, inter
     """写入数据库。写到表optimization_data"""
     db_engine = get_db_engine()
 
-    table_columns = ['strategy', 'vt_symbol', 'period', 'start_date', 'end_date', 'target', 'target_value', 'params',
-                     'remark', 'generate_datetime', 'zf_year1', 'zf_year2', 'zf_year3', 'count', 'win_count',
-                     'init_cash']
+    table_columns = ['strategy', 'vt_symbol', 'period', 'start_date', 'end_date', 'target', 'target_value',
+                     'sharpe_ratio', 'total_profit', 'params', 'remark', 'generate_datetime', 'zf_year1', 'zf_year2',
+                     'zf_year3', 'count', 'win_count', 'init_cash']
     data_dict = {key: [] for key in table_columns}
     data_dict[table_columns[0]] = [strategy_class] * len(results)
     data_dict[table_columns[1]] = [vt_symbol] * len(results)
@@ -25,19 +25,21 @@ def save_table_optimization(results: list, strategy_class: str, vt_symbol, inter
     data_dict[table_columns[3]] = [start_date] * len(results)
     data_dict[table_columns[4]] = [end_date] * len(results)
     data_dict[table_columns[5]] = [target] * len(results)
-    data_dict[table_columns[8]] = [remark] * len(results)
-    data_dict[table_columns[9]] = [generate_datetime] * len(results)
-    data_dict[table_columns[15]] = [round(init_cash, 2)] * len(results)
+    data_dict[table_columns[10]] = [remark] * len(results)
+    data_dict[table_columns[11]] = [generate_datetime] * len(results)
+    data_dict[table_columns[17]] = [round(init_cash, 2)] * len(results)
     for result in results:
         params: dict = result[0]
-        target_value = result[1]
+        target_value = result[1] if target == 'sharpe_ratio' else result[2]  # 目前暂时target只有sharpe_ratio、total_profit
         data_dict[table_columns[6]].append(round(target_value, 4))
-        data_dict[table_columns[7]].append(str(params))
-        data_dict[table_columns[10]].append(round(result[2], 4))
-        data_dict[table_columns[11]].append(round(result[3], 4))
-        data_dict[table_columns[12]].append(round(result[4], 4))
-        data_dict[table_columns[13]].append(result[6])
-        data_dict[table_columns[14]].append(result[7])
+        data_dict[table_columns[7]].append(round(result[1], 4))
+        data_dict[table_columns[8]].append(round(result[2], 4))
+        data_dict[table_columns[9]].append(str(params))
+        data_dict[table_columns[12]].append(round(result[3], 4))
+        data_dict[table_columns[13]].append(round(result[4], 4))
+        data_dict[table_columns[14]].append(round(result[5], 4))
+        data_dict[table_columns[15]].append(result[7])
+        data_dict[table_columns[16]].append(result[8])
     df = pd.DataFrame.from_dict(data_dict)
     df.to_sql('optimization_data', db_engine, if_exists='append', index=False)
 
@@ -58,7 +60,7 @@ def query_optimization_exist(strategy_class: str, vt_symbol: str, interval: str,
 def get_db_engine():
     global g_db_engine
     if g_db_engine is None:
-        # g_db_engine = create_engine('mysql+pymysql://ucnotkline:%s@192.168.2.205:3306/vnpy' % parse.quote_plus('ucnotkline@205'))
-        g_db_engine = create_engine('mysql+pymysql://root:%s@localhost:3306/vnpy' % parse.quote_plus('admin'))
+        g_db_engine = create_engine('mysql+pymysql://ucnotkline:%s@192.168.2.205:3306/vnpy' % parse.quote_plus('ucnotkline@205'))
+        # g_db_engine = create_engine('mysql+pymysql://root:%s@localhost:3306/vnpy' % parse.quote_plus('admin'))
 
     return g_db_engine

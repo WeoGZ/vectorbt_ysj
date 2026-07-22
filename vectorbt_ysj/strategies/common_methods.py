@@ -15,18 +15,22 @@ from vectorbt_ysj.utils.statistic_utils import *
 def common_execute(calculate_func: Callable, symbol: str, init_cash: float, start_date: datetime, end_date: datetime,
                    interval: Interval, klines_open: pd.DataFrame = None, klines_high: pd.DataFrame = None,
                    klines_low: pd.DataFrame = None, klines_close: pd.DataFrame = None, klines_vol: pd.DataFrame = None,
-                   params_dict: dict = None, preload_days: int = 90, print_trade_detail: bool = False) -> tuple | None:
-    """历史回测程序。calculate_func是各个策略计算交易信号的封装函数。出了交易信号之后的绩效评测流程是统一的"""
+                   params_dict: dict = None, preload_days: int = 90, print_trade_detail: bool = False,) -> tuple | None:
+    """历史回测程序。出了交易信号之后的绩效评测流程是统一的。
+    参数说明：^calculate_func：是各个策略计算交易信号的封装函数。"""
+    # print(f'---t0={datetime.now()}---')
     if klines_close is None:
         # preload_days = (math.ceil(length / KLINE_SIZE_PER_DAY_MAP[interval]) + 60) * (31 / 21)  # 换算成自然日数量
         # preload_days = (n / 5 + 1) * 30  # 参数n数值每5大概所需1个月数据计算，在换算成自然日。额外补一个月。
         klines_open, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date,
                                                                                       end_date, interval, preload_days)
+        # print(f'---t1={datetime.now()}---')
     if klines_close is not None and not klines_close.empty:
         # print(f'>>total_len={len(klines_close)}')
         long_open_signals, long_close_signals, short_open_signals, short_close_signals = calculate_func(
             klines_close[symbol], klines_high[symbol], klines_low[symbol], klines_open[symbol], klines_vol[symbol],
             interval)
+        # print(f'---t2={datetime.now()}---')
 
         long_entries = pd.Series(long_open_signals, index=klines_close.index)
         long_exits = pd.Series(long_close_signals, index=klines_close.index)
@@ -110,6 +114,8 @@ def common_execute(calculate_func: Callable, symbol: str, init_cash: float, star
         # 每日盈亏
         daily_pnl = generate_daily_pnl(asset_values, interval, init_cash)
         sharpe_ratio = calculate_statistics(daily_pnl, init_cash, 242, 0, False)['sharpe_ratio']
+        # 总盈利
+        total_profit = asset_values.iloc[-1] - init_cash
         # 信号数量
         signal_count = len(total_portfolio.trades.records_readable)  # 信号对数（一买一卖为一对）
         winning_count = len(total_portfolio.trades.winning)
@@ -138,4 +144,5 @@ def common_execute(calculate_func: Callable, symbol: str, init_cash: float, star
         # total_portfolio.plot_trade_pnl(symbol)  # 未成功
         # total_portfolio.trades.plot()  # 未成功
 
-        return params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count, winning_count
+        return (params_dict, sharpe_ratio, total_profit, zf_year1, zf_year2, zf_year3, daily_pnl, signal_count,
+                winning_count)

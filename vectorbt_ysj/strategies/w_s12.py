@@ -9,6 +9,7 @@ from typing import Callable
 
 import plotly.io as pio
 from tqdm import tqdm
+import pymysql
 
 from vectorbt_ysj.common.future_list import FUTURE_LIST_ALL
 from vectorbt_ysj.common.init_cash import INIT_CASH_ALL
@@ -131,8 +132,9 @@ def wrap_func(symbol: str, init_cash: float, start_date: datetime, end_date: dat
 
 
 def do_exhaustion(symbol: str, init_cash: float, start_date: datetime, end_date: datetime, interval: Interval,
-                  all_param_combs: list, save_remark: str, max_workers: int | None = None, save_num: int = 0):
-    """穷举单个品种。参数：save_num——保存的数量，若为0表示保存全部"""
+                  all_param_combs: list, save_remark: str, max_workers: int | None = None, save_num: int = 0,
+                  target_type: int = 0):
+    """穷举单个品种。参数：save_num——保存的数量，若为0表示保存全部；target_type——排序指标类型，0表示夏普比率，1表示总盈亏；"""
     # preload_days = (300 + 60) * (31 / 21)  # 换算成自然日数量
     preload_days = 180  # 参数n数值每5大概所需1个月数据计算，在换算成自然日。额外补一个月。参数n的最大值为90
     klines_open, klines_high, klines_low, klines_close, klines_vol = fetch_klines([symbol], start_date, end_date,
@@ -159,6 +161,7 @@ def do_exhaustion(symbol: str, init_cash: float, start_date: datetime, end_date:
 
     start: float = perf_counter()
     results: list[tuple]
+    target_index = 1 if target_type == 0 else 2
     print(f'\n>>>>开始穷举，symbol={symbol}，startDate={convert2_datetime_str(start_date)}，endDate='
           f'{convert2_datetime_str(end_date)}, interval={interval.value}，size={len(all_param_combs)}')
     with ProcessPoolExecutor(max_workers, mp_context=get_context("spawn")) as executor:
@@ -168,7 +171,7 @@ def do_exhaustion(symbol: str, init_cash: float, start_date: datetime, end_date:
         # )  # 多进程中直接使用tqdm无效，需要使用tqdm.contrib.concurrent下的process_map()
         it: Iterable = executor.map(execute_func, all_param_combs)
         results = list(it)
-        results.sort(reverse=True, key=lambda x: x[1])  # 按评判指标值倒序排序
+        results.sort(reverse=True, key=lambda x: x[target_index])  # 按评判指标值倒序排序
     end: float = perf_counter()
     cost: int = int(end - start)
     print(f"\n>>>>穷举算法优化完成，耗时{cost}秒")
@@ -296,13 +299,49 @@ def single_test():
 
     calculate_func: Callable = partial(calculate_signals, length=length, stpr=stpr)
     params_dict = {'len': length, 'stpr': stpr}
-    params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3, daily_pnl, count, win_count = (
+    params_dict, sharpe_ratio, total_profit, zf_year1, zf_year2, zf_year3, daily_pnl, count, win_count = (
         common_execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=params_dict,
                        print_trade_detail=True))
 
     # result = [(params_dict, sharpe_ratio, zf_year1, zf_year2, zf_year3)]
     # save_table_optimization(result, os.path.basename(__file__), symbol, interval.value, start_date, end_date,
     #                         'sharpe_ratio', 'test1', datetime.now())
+
+
+def update_db_data():
+    """更新数据表。由于表结构可能发生变化，因此需要更新新增的字段数据"""
+    query_sql = ("SELECT * FROM `optimization_data` WHERE remark='fixed_startDate=2020.1.1' AND period='60m' "
+                 "ORDER BY generate_datetime DESC;")
+    db_engine = get_db_engine()
+    db_records = pd.read_sql_query(query_sql, db_engine)
+    if db_records is not None and len(db_records) > 0:
+        to_update_list: list = []
+        for index, row in db_records.iterrows():
+            param: dict = convert2dict(row['params'])
+            interval = find_interval(row['period'])
+            symbol = row['vt_symbol']
+            init_cash = row['init_cash']
+            start_date = row['start_date']
+            end_date = row['end_date']
+
+            calculate_func: Callable = partial(calculate_signals, length=param['len'], stpr=param['stpr'])
+            params_dict, sharpe_ratio, total_profit, zf_year1, zf_year2, zf_year3, daily_pnl, count, win_count = (
+                common_execute(calculate_func, symbol, init_cash, start_date, end_date, interval, params_dict=param))
+
+            row['sharpe_ratio'] = sharpe_ratio
+            row['total_profit'] = total_profit
+
+            to_update_list.append((round(sharpe_ratio, 4), round(total_profit, 2), row['strategy'], symbol,
+                                   row['period'], start_date, end_date, row['params']))
+
+        conn = pymysql.connect(host='192.168.2.205', port=3306, db='vnpy', user='ucnotkline', password='ucnotkline@205',
+                               charset='utf8')
+        cursor = conn.cursor()
+        cursor.executemany("update optimization_data set sharpe_ratio=%s,total_profit=%s where strategy=%s and "
+                           "vt_symbol=%s and period=%s and start_date=%s and end_date=%s and params=%s",
+                           to_update_list)
+        conn.commit()
+        conn.close()
 
 
 if __name__ == "__main__":
@@ -318,6 +357,9 @@ if __name__ == "__main__":
     # 多进程并行
     # batch_tasks()
     batch_tasks2()
+
+    # 更新数据表数据
+    # update_db_data()
 
     t1 = datetime.now()
     print(f'\n>>>>>>总耗时{t1 - t0}s, now={t1}')
