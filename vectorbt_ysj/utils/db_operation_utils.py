@@ -33,7 +33,7 @@ def save_table_optimization(results: list, strategy_class: str, vt_symbol, inter
         target_value = result[1] if target == 'sharpe_ratio' else result[2]  # 目前暂时target只有sharpe_ratio、total_profit
         data_dict[table_columns[6]].append(round(target_value, 4))
         data_dict[table_columns[7]].append(round(result[1], 4))
-        data_dict[table_columns[8]].append(round(result[2], 4))
+        data_dict[table_columns[8]].append(round(result[2], 2))
         data_dict[table_columns[9]].append(str(params))
         data_dict[table_columns[12]].append(round(result[3], 4))
         data_dict[table_columns[13]].append(round(result[4], 4))
